@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import json
 import uuid
 import fnmatch
@@ -1543,6 +1544,20 @@ class ReorderGroupingRulesRequest(BaseModel):
     order: list[str] = []      # rule ids in the desired priority order
 
 
+class DepGraphNode(BaseModel):
+    name: str
+    path: str                  # relative to ROOT_DIR
+
+class DepGraphEdge(BaseModel):
+    source: str                # project name containing the reference
+    target: str                # project name being referenced
+    files: list[str]           # relative file paths where reference appears (capped)
+
+class DepGraph(BaseModel):
+    nodes: list[DepGraphNode]
+    edges: list[DepGraphEdge]
+
+
 def load_grouping_rules() -> list[dict]:
     """Read all grouping rules from disk; a missing/corrupt file yields []."""
     if not GROUPING_RULES_FILE.exists():
@@ -1860,3 +1875,73 @@ def list_projects() -> list[ProjectSummary]:
         projects.append(entry)
 
     return projects
+
+
+# ── Dependency graph ──────────────────────────────────────────────────────────
+_DEP_SOURCE_EXTS = frozenset({".py", ".js", ".jsx", ".ts", ".tsx"})
+_DEP_MANIFEST_NAMES = frozenset({"requirements.txt", "package.json"})
+_DEP_FILES_CAP = 3   # max file paths recorded per edge
+
+
+@app.get("/api/dep-graph", response_model=DepGraph)
+def get_dep_graph() -> DepGraph:
+    """Scan each project's source files for references to sibling project names.
+
+    Returns a graph of (source, target) edges where source is a project that
+    contains the target's name in one of its code or manifest files. Uses
+    word-boundary matching so short names like 'tutorials' don't match as
+    substrings of unrelated identifiers.
+    """
+    projects = list(iter_leaf_project_dirs())
+    project_names = [p.name for p in projects]
+
+    # Pre-compile a case-insensitive word-boundary pattern per project name.
+    # Negative lookbehind/lookahead for [A-Za-z0-9_] lets hyphenated names like
+    # 'stock-agents' match while still avoiding partial-word false positives.
+    name_patterns: dict[str, re.Pattern] = {
+        name: re.compile(
+            r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        )
+        for name in project_names
+    }
+
+    nodes = [
+        DepGraphNode(name=p.name, path=str(p.relative_to(ROOT_DIR)))
+        for p in projects
+    ]
+    edges: list[DepGraphEdge] = []
+
+    for project in projects:
+        refs: dict[str, list[str]] = {}
+
+        for dirpath, dirnames, filenames in os.walk(project):
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in ACTIVITY_SKIP_DIRS and not d.startswith(".")
+            ]
+            for fname in filenames:
+                fpath = Path(dirpath) / fname
+                if fpath.suffix.lower() not in _DEP_SOURCE_EXTS and fname not in _DEP_MANIFEST_NAMES:
+                    continue
+                try:
+                    content = fpath.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    continue
+                rel = str(fpath.relative_to(project))
+                for other_name, pat in name_patterns.items():
+                    if other_name == project.name:
+                        continue
+                    if pat.search(content):
+                        bucket = refs.setdefault(other_name, [])
+                        if len(bucket) < _DEP_FILES_CAP:
+                            bucket.append(rel)
+
+        for target_name, file_list in refs.items():
+            edges.append(DepGraphEdge(
+                source=project.name,
+                target=target_name,
+                files=file_list,
+            ))
+
+    return DepGraph(nodes=nodes, edges=edges)

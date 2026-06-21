@@ -1,5 +1,77 @@
 # Projects Landing — Improvements
 
+## Dependency Graph Visualization
+
+Added a collapsible **Dependency Graph** panel to the dashboard that shows which
+projects reference one another in their source files. The graph uses a circular
+SVG layout with directed arcs, clickable nodes, and a detail panel listing the
+files where each cross-project reference appears.
+
+### Backend (`backend/main.py`)
+
+- Added `import re` to the imports.
+- New Pydantic models: `DepGraphNode`, `DepGraphEdge`, `DepGraph`.
+- New `GET /api/dep-graph` endpoint:
+  - Calls `iter_leaf_project_dirs()` to enumerate all tracked projects (including
+    children of `mockups`/`tutorials`).
+  - For each project, walks source files (`.py`, `.js`, `.jsx`, `.ts`, `.tsx`) and
+    manifest files (`requirements.txt`, `package.json`), skipping the usual
+    noise dirs (`node_modules`, `.venv`, `.git`, etc.).
+  - Uses a pre-compiled `re.compile()` pattern per sibling project name with
+    negative-lookbehind/lookahead (`(?<![A-Za-z0-9_])…(?![A-Za-z0-9_])`) so
+    hyphenated names like `stock-agents` match while short names like `tutorials`
+    don't match as substrings of unrelated identifiers.
+  - Returns `{nodes: [...], edges: [...]}` where each edge carries up to 3
+    relative file paths as evidence.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+
+- New `DepGraphSVG` component: a pure SVG circular orbital layout.
+  - All leaf projects are placed as nodes on a circle (radius 148px, 560×380 viewBox).
+  - Directed edges are drawn as quadratic bezier arcs curving inward toward the
+    center, with arrowheads via SVG `<marker>`.
+  - Nodes with cross-project references are teal (accent-2); nodes with none are
+    dimmed. The selected node turns blue (accent).
+  - Clicking a node highlights its connections and dims all others; clicking again
+    deselects.
+  - Labels truncate at 13 characters; full names appear in `<title>` tooltips.
+  - Keyboard-accessible: `role="button"` + `tabIndex` + `Enter` handler on each node.
+- New `DependencyGraph` wrapper:
+  - Collapses/expands like `FreshnessHeatmap` and `StackOverlapMatrix`.
+  - Lazily loads `/api/dep-graph` on first open (not on page load).
+  - Shows a "self-contained" pill when no edges are found, and a "N cross-project
+    refs" pill when edges exist.
+  - Detail panel below the SVG shows the selected node's incoming/outgoing
+    references with `→`/`←` direction arrows and the evidence file paths.
+- `<DependencyGraph />` placed in the dashboard content block between the Stack
+  Overlap Matrix and the search bar.
+- CSS: `.dep-graph` and related classes follow the existing `.stack-matrix`
+  dark-theme pattern.
+
+### How to use
+
+1. Run the backend and frontend as normal.
+2. On the main dashboard, expand the **Dependency Graph** section (between the
+   Stack Overlap Matrix and the search bar).
+3. Click any node to highlight its connections. The detail panel below the graph
+   shows the files where each reference was found.
+4. If all projects are self-contained, the graph shows a "self-contained" pill
+   and an explanatory message.
+
+### Notes / remaining work
+
+- Detection is heuristic (name-in-source-file), not a true module resolution pass.
+  A project could reference another's name in a comment or string constant
+  unrelated to an actual import. False positives are uncommon with specific names
+  like `slides2video` or `stock-agents` but more likely for generic names.
+- Scanning happens at request time (no cache). For workspaces with many large
+  projects this could be slow; a TTL cache or background index could be added.
+- The circular layout works well up to ~18 nodes. For denser workspaces a
+  force-directed or hierarchical layout would reduce label crowding.
+- The graph does not yet detect shared sibling imports via relative paths
+  (`../other_project/`); adding that would increase recall for workspaces that
+  compose projects via file symlinks or shared utilities.
+
 ## Project Activity Feed (live recent file changes)
 
 Added a live feed showing recent file changes across all top-level projects, so

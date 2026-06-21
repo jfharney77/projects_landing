@@ -1800,6 +1800,256 @@ function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0, readmeMat
     );
 }
 
+// ── Dependency graph ─────────────────────────────────────────────────────────
+
+function DepGraphSVG({ nodes, edges, selected, onSelect }) {
+    const W = 560, H = 380;
+    const cx = W / 2, cy = H / 2;
+    const R = 148;
+    const n = nodes.length;
+    if (n === 0) return null;
+
+    const positions = nodes.map((node, i) => {
+        const a = (2 * Math.PI * i / n) - Math.PI / 2;
+        return { ...node, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+    });
+    const posMap = Object.fromEntries(positions.map((p) => [p.name, p]));
+    const edgeSet = new Set(edges.flatMap((e) => [e.source, e.target]));
+    const connectedSet = selected
+        ? new Set(
+            edges
+                .filter((e) => e.source === selected || e.target === selected)
+                .flatMap((e) => [e.source, e.target]),
+          )
+        : null;
+
+    function edgePath(from, to) {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const gap = 10;
+        const sx = from.x + (dx * gap) / d;
+        const sy = from.y + (dy * gap) / d;
+        const ex = to.x - (dx * gap) / d;
+        const ey = to.y - (dy * gap) / d;
+        const mx = (sx + ex) / 2;
+        const my = (sy + ey) / 2;
+        // Pull control point 35% toward SVG center for a gentle inward curve.
+        const qx = mx * 0.65 + cx * 0.35;
+        const qy = my * 0.65 + cy * 0.35;
+        return `M${sx},${sy} Q${qx},${qy} ${ex},${ey}`;
+    }
+
+    return (
+        <svg
+            viewBox={`0 0 ${W} ${H}`}
+            style={{ width: '100%', maxWidth: W, display: 'block', margin: '0 auto' }}
+            aria-label="Project dependency graph"
+        >
+            <defs>
+                <marker id="dg-arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+                    <path d="M0,0 L8,4 L0,8 Z" fill="var(--accent)" opacity="0.9" />
+                </marker>
+                <marker id="dg-arr-lo" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+                    <path d="M0,0 L8,4 L0,8 Z" fill="var(--card-border)" opacity="0.5" />
+                </marker>
+            </defs>
+
+            {/* orbit ring */}
+            <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--card-border)" strokeWidth="1" strokeDasharray="3 6" opacity="0.35" />
+
+            {/* edges */}
+            {edges.map((edge, i) => {
+                const from = posMap[edge.source];
+                const to = posMap[edge.target];
+                if (!from || !to) return null;
+                const active = !selected || edge.source === selected || edge.target === selected;
+                return (
+                    <path
+                        key={i}
+                        d={edgePath(from, to)}
+                        fill="none"
+                        stroke={active ? 'var(--accent)' : 'var(--card-border)'}
+                        strokeWidth={active ? 1.6 : 0.7}
+                        opacity={active ? 0.8 : 0.18}
+                        markerEnd={active ? 'url(#dg-arr)' : 'url(#dg-arr-lo)'}
+                    />
+                );
+            })}
+
+            {/* nodes */}
+            {positions.map((pos) => {
+                const isSel = pos.name === selected;
+                const hasDep = edgeSet.has(pos.name);
+                const active = !connectedSet || connectedSet.has(pos.name);
+                const nodeR = isSel ? 9 : hasDep ? 7 : 5;
+
+                const dxN = pos.x - cx;
+                const dyN = pos.y - cy;
+                const dist = Math.sqrt(dxN * dxN + dyN * dyN) || 1;
+                const nx = dxN / dist;
+                const ny = dyN / dist;
+                const PUSH = nodeR + 9;
+                const lx = nx * PUSH;
+                const ly = ny * PUSH;
+                const tAnchor = nx > 0.35 ? 'start' : nx < -0.35 ? 'end' : 'middle';
+                let dBaseline = 'middle';
+                if (tAnchor === 'middle') dBaseline = ny > 0 ? 'hanging' : 'auto';
+                const label = pos.name.length > 13 ? `${pos.name.slice(0, 11)}…` : pos.name;
+
+                return (
+                    <g
+                        key={pos.name}
+                        transform={`translate(${pos.x},${pos.y})`}
+                        onClick={() => onSelect(isSel ? null : pos.name)}
+                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === 'Enter' && onSelect(isSel ? null : pos.name)}
+                        aria-label={`${pos.name}${hasDep ? ' (has cross-project references)' : ''}`}
+                        aria-pressed={isSel}
+                    >
+                        <title>{pos.name}</title>
+                        {/* hit target larger than visible circle */}
+                        <circle r={nodeR + 5} fill="transparent" stroke="none" />
+                        <circle
+                            r={nodeR}
+                            fill={isSel ? 'var(--accent)' : hasDep ? 'var(--accent-2)' : 'var(--bg-soft)'}
+                            stroke={isSel ? 'white' : hasDep ? 'rgba(48,209,139,0.45)' : 'var(--card-border)'}
+                            strokeWidth={isSel ? 2 : 1}
+                            opacity={active ? 1 : 0.22}
+                        />
+                        <text
+                            x={lx}
+                            y={ly}
+                            textAnchor={tAnchor}
+                            dominantBaseline={dBaseline}
+                            fontSize="9.5"
+                            fill={active ? 'var(--text)' : 'var(--muted)'}
+                            opacity={active ? 0.92 : 0.35}
+                            pointerEvents="none"
+                        >
+                            {label}
+                        </text>
+                    </g>
+                );
+            })}
+        </svg>
+    );
+}
+
+function DependencyGraph() {
+    const [open, setOpen] = useState(false);
+    const [data, setData] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [selected, setSelected] = useState(null);
+
+    useEffect(() => {
+        if (!open || data !== null) return;
+        setLoading(true);
+        setError('');
+        // API_BASE is a module-level const initialised before this runs.
+        // eslint-disable-next-line no-use-before-define
+        fetch(`${API_BASE}/api/dep-graph`)
+            .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then((d) => { setData(d); setLoading(false); })
+            .catch((e) => { setError(e.message || 'Failed to load'); setLoading(false); });
+    }, [open, data]);
+
+    const edgeCount = data?.edges?.length ?? 0;
+
+    const selectedEdges = useMemo(() => {
+        if (!data || !selected) return [];
+        return data.edges.filter((e) => e.source === selected || e.target === selected);
+    }, [data, selected]);
+
+    return (
+        <div className="dep-graph">
+            <button
+                className="heatmap-toggle"
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+            >
+                <span className="heatmap-toggle-icon">{open ? '▾' : '▸'}</span>
+                <span className="heatmap-toggle-label">Dependency Graph</span>
+                <span className="heatmap-toggle-meta">
+                    {data && edgeCount > 0 && (
+                        <span className="heatmap-pill heatmap-pill--fresh">
+                            {edgeCount} cross-project ref{edgeCount !== 1 ? 's' : ''}
+                        </span>
+                    )}
+                    {data && edgeCount === 0 && (
+                        <span className="heatmap-pill dep-graph-pill-none">self-contained</span>
+                    )}
+                </span>
+            </button>
+            {open && (
+                <div className="heatmap-body dep-graph-body">
+                    {loading && <p className="dep-graph-status">Scanning projects…</p>}
+                    {error && <p className="dep-graph-status dep-graph-status--error">⚠ {error}</p>}
+                    {data && edgeCount === 0 && !loading && (
+                        <div className="dep-graph-empty">
+                            <p>No cross-project references detected in source files.</p>
+                            <p className="dep-graph-hint">
+                                Scans <code>.py</code>, <code>.js/.jsx/.ts/.tsx</code>,{' '}
+                                <code>requirements.txt</code>, <code>package.json</code>{' '}
+                                for occurrences of sibling project names.
+                            </p>
+                        </div>
+                    )}
+                    {data && edgeCount > 0 && (
+                        <div className="dep-graph-content">
+                            <DepGraphSVG
+                                nodes={data.nodes}
+                                edges={data.edges}
+                                selected={selected}
+                                onSelect={setSelected}
+                            />
+                            {selected && selectedEdges.length > 0 && (
+                                <div className="dep-graph-detail">
+                                    <p className="dep-graph-detail-title">
+                                        <strong>{selected}</strong> — cross-project references
+                                    </p>
+                                    <ul className="dep-graph-detail-list">
+                                        {selectedEdges.map((edge, i) => {
+                                            const isOut = edge.source === selected;
+                                            const other = isOut ? edge.target : edge.source;
+                                            return (
+                                                <li key={i} className="dep-graph-detail-edge">
+                                                    <span
+                                                        className="dep-graph-edge-dir"
+                                                        title={isOut ? `${selected} references ${other}` : `${other} references ${selected}`}
+                                                    >
+                                                        {isOut ? '→' : '←'}
+                                                    </span>
+                                                    <span className="dep-graph-edge-name">{other}</span>
+                                                    <span className="dep-graph-edge-files">{edge.files.join(', ')}</span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            )}
+                            {selected && selectedEdges.length === 0 && (
+                                <p className="dep-graph-hint">No connections for <strong>{selected}</strong></p>
+                            )}
+                            {!selected && (
+                                <p className="dep-graph-hint">
+                                    Click a node to see its connections.
+                                    {' '}<span className="dep-graph-legend-item dep-graph-legend--ref">●</span> has references
+                                    {' '}· <span className="dep-graph-legend-item dep-graph-legend--none">●</span> no references
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 const REPO_FILTERS = [
@@ -2749,6 +2999,7 @@ function App() {
                         leaves={allLeaves}
                         onCompare={(path) => { window.location.hash = compareHashFor(path); }}
                     />
+                    <DependencyGraph />
                     <SearchBar
                         query={query}
                         onQuery={setQuery}
