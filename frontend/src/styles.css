@@ -377,6 +377,32 @@ h1 {
     color: #8fa0d8;
 }
 
+.resource-usage {
+    margin-top: 0.55rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.85rem;
+}
+
+.resource-metric {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.74rem;
+    letter-spacing: 0.3px;
+    color: var(--muted);
+}
+
+.resource-icon {
+    font-size: 0.82rem;
+    opacity: 0.85;
+}
+
+.resource-metric--alert {
+    color: var(--danger);
+    font-weight: 600;
+}
+
 .tech-tags {
     margin-top: 0.85rem;
     display: flex;

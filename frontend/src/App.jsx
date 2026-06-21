@@ -39,6 +39,34 @@ function formatLastUpdated(iso) {
     return `Updated ${date.toLocaleString()}`;
 }
 
+function formatBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let value = n / 1024;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+    }
+    return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+}
+
+function formatCount(count) {
+    const n = Number(count) || 0;
+    return `${n.toLocaleString()} file${n === 1 ? '' : 's'}`;
+}
+
+// Days since a project's last modification, or null if unknown.
+function ageInDays(epochSeconds) {
+    const t = Number(epochSeconds);
+    if (!t) return null;
+    return (Date.now() / 1000 - t) / 86400;
+}
+
+const STALE_DAYS = 30;          // no edits in this long → flagged stale
+const BLOAT_BYTES = 250 * 1024 * 1024;  // 250 MB → flagged bloated
+
 function leafSortValue(project, sortBy) {
     if (sortBy === 'name') return project.name.toLowerCase();
     return Number(project.last_modified_epoch || 0);
@@ -368,6 +396,10 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
         }
     };
 
+    const days = ageInDays(project.last_modified_epoch);
+    const isStale = days !== null && days >= STALE_DAYS;
+    const isBloated = Number(project.disk_bytes) >= BLOAT_BYTES;
+
     const hasBackend = project.tech_tags && (
         project.tech_tags.includes('FastAPI') ||
         project.tech_tags.includes('Python')
@@ -393,6 +425,26 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
                 </p>
             )}
             <p className="updated-at">{formatLastUpdated(project.last_modified)}</p>
+            <div className="resource-usage" aria-label="Resource usage">
+                <span
+                    className={`resource-metric${isBloated ? ' resource-metric--alert' : ''}`}
+                    title={isBloated ? 'Large on-disk footprint — possibly bloated' : 'Total on-disk size'}
+                >
+                    <span className="resource-icon" aria-hidden="true">💾</span>
+                    {formatBytes(project.disk_bytes)}
+                </span>
+                <span className="resource-metric" title="Number of files in the project tree">
+                    <span className="resource-icon" aria-hidden="true">🗂</span>
+                    {formatCount(project.file_count)}
+                </span>
+                <span
+                    className={`resource-metric${isStale ? ' resource-metric--alert' : ''}`}
+                    title={isStale ? `No changes in ${Math.round(days)} days — possibly stale` : 'Time since last modification'}
+                >
+                    <span className="resource-icon" aria-hidden="true">🕑</span>
+                    {days === null ? 'unknown' : `${formatRelativeAge(days * 86400)}`}
+                </span>
+            </div>
             {project.tech_tags && project.tech_tags.length > 0 && (
                 <div className="tech-tags" aria-label="Technology tags">
                     {project.tech_tags.map((tag) => (

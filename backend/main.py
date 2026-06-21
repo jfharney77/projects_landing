@@ -58,6 +58,8 @@ class ProjectSummary(BaseModel):
     has_readme: bool = False
     last_modified: str = ""
     last_modified_epoch: float = 0.0
+    disk_bytes: int = 0      # total on-disk size of the project tree
+    file_count: int = 0      # number of files in the project tree
     tech_tags: list[str] = []
     improvement_idea: str = ""
     children: list["ProjectSummary"] = []
@@ -226,6 +228,35 @@ def iso_modified(project_dir: Path) -> tuple[str, float]:
     ts = project_dir.stat().st_mtime
     iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
     return iso, ts
+
+
+def compute_disk_usage(project_dir: Path) -> tuple[int, int]:
+    """Return (total_bytes, file_count) for a project's full on-disk tree.
+
+    Walks the entire tree — including dependency/build dirs and .git — because
+    those are exactly what make a project "bloated", so they belong in the
+    footprint shown on the card. Symlinks are not followed (size of the link
+    itself), and unreadable entries are skipped rather than raising.
+    """
+    total_bytes = 0
+    file_count = 0
+    stack = [project_dir]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            total_bytes += entry.stat(follow_symlinks=False).st_size
+                            file_count += 1
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total_bytes, file_count
 
 
 # Keywords per project for run-association scoring.
@@ -1040,6 +1071,7 @@ def build_project(project_dir: Path) -> ProjectSummary:
     git_remote_url = detect_git_remote_url(project_dir) if has_git else ""
     has_readme = find_readme(project_dir) is not None
     modified_iso, modified_epoch = iso_modified(project_dir)
+    disk_bytes, file_count = compute_disk_usage(project_dir)
     rel_path = str(project_dir.relative_to(ROOT_DIR))
     tech_tags = infer_tech_tags(project_dir)
     return ProjectSummary(
@@ -1054,6 +1086,8 @@ def build_project(project_dir: Path) -> ProjectSummary:
         has_readme=has_readme,
         last_modified=modified_iso,
         last_modified_epoch=modified_epoch,
+        disk_bytes=disk_bytes,
+        file_count=file_count,
         tech_tags=tech_tags,
         improvement_idea=infer_improvement_idea(project_dir, tech_tags),
     )

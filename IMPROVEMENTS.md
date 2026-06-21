@@ -84,3 +84,46 @@ defaults.
   enhancement could also reflect filters in the URL hash for shareable views.
 - The activity-feed "Live" toggle is intentionally *not* persisted, to avoid a tab
   silently polling forever after a reload; could be added if desired.
+
+## Resource usage cards (disk size, file count, staleness)
+
+Added per-project resource metrics to each project card so it's easy to spot
+**bloated** (large on-disk footprint) or **stale** (untouched for a long time)
+projects at a glance.
+
+### Backend (`backend/main.py`)
+- `ProjectSummary` gained two fields: `disk_bytes` (total on-disk size of the
+  project tree) and `file_count` (number of files in the tree).
+- New `compute_disk_usage()` helper: an iterative, stack-based `os.scandir` walk
+  returning `(total_bytes, file_count)`. It intentionally walks the **entire**
+  tree — including `node_modules`, `dist`, and `.git` — because those are exactly
+  what make a project bloated, so they belong in the footprint. Symlinks are not
+  followed (`follow_symlinks=False`), and unreadable entries are skipped rather
+  than raising.
+- `build_project()` now populates the two new fields, so they flow through
+  `GET /api/projects` for both top-level and expandable child cards.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- New formatters: `formatBytes()` (B/KB/MB/GB/TB with 1-decimal precision under
+  10), `formatCount()` (pluralized, locale-grouped file count), and `ageInDays()`.
+- `ProjectCard` renders a `.resource-usage` row below the "Updated …" line with
+  three metrics: 💾 disk size, 🗂 file count, 🕑 time since last change (reusing
+  the existing `formatRelativeAge` helper).
+- Threshold-based highlighting: disk size ≥ 250 MB (`BLOAT_BYTES`) and no changes
+  in ≥ 30 days (`STALE_DAYS`) get the `resource-metric--alert` style (danger
+  color, bold) with an explanatory tooltip, making bloated/stale projects pop.
+- Styling matches the card's existing muted-metadata look; alerts reuse the
+  existing `--danger` token.
+
+### Notes / what remains
+- Disk-usage is computed synchronously on each `/api/projects` request. For the
+  current workspace this is fast, but a project with a very large `node_modules`
+  could add latency; a cache keyed on directory mtime would be the natural next
+  step if it ever becomes noticeable.
+- The bloat/stale thresholds are fixed constants; they could be made
+  user-configurable or sort options (e.g. "largest first", "stalest first") in a
+  follow-up.
+- Could not run the backend (`python3`)/frontend (`npm run build`) here because
+  those commands require interactive approval in this environment; changes were
+  reviewed by hand and are self-contained additions that don't alter existing
+  fields or behavior.
