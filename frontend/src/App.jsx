@@ -89,6 +89,35 @@ function loadStoredFilters() {
     }
 }
 
+function SkeletonCard() {
+    return (
+        <article className="project-card skeleton-card" aria-hidden="true">
+            <div className="card-top">
+                <span className="skeleton-line skeleton-title" />
+                <span className="skeleton-line skeleton-tag" />
+            </div>
+            <span className="skeleton-line skeleton-text" />
+            <span className="skeleton-line skeleton-text short" />
+            <span className="skeleton-line skeleton-meta" />
+            <div className="card-actions">
+                <span className="skeleton-line skeleton-pill" />
+                <span className="skeleton-line skeleton-pill" />
+                <span className="skeleton-line skeleton-pill" />
+            </div>
+        </article>
+    );
+}
+
+function SkeletonList({ count = 6 }) {
+    return (
+        <div className="top-list" aria-busy="true" aria-label="Loading projects">
+            {Array.from({ length: count }, (_, i) => (
+                <SkeletonCard key={i} />
+            ))}
+        </div>
+    );
+}
+
 function RunCard({ run }) {
     return (
         <article className="project-card run-card">
