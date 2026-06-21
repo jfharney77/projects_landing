@@ -956,3 +956,48 @@ just carries one extra field per issue.
   new field has a default, so the existing `backend/test_health_score.py`
   fixtures continue to construct valid models.
 - Not committed, per instructions.
+
+## Quick-start buttons — live "Run Backend/Frontend" status
+
+The dashboard already had one-click **▶ Backend** / **▶ Frontend** buttons that
+launch a project's dev servers. They only showed a transient launch result.
+They now carry a **live status indicator** that continuously reflects whether
+each service is actually running, independent of who started it.
+
+### Backend (`backend/main.py`)
+- New `LiveServiceStatus` model (`project`, `service`, `running`, `configured`,
+  `port`).
+- New `GET /api/service-status?project_path=&service=` endpoint: returns whether
+  the project's known backend/frontend port is currently bound, reusing the
+  existing `BACKEND_PORTS` / `FRONTEND_PORTS` maps and `_port_is_in_use()`.
+  Status is port-based, so it detects services started from a terminal or IDE,
+  not just ones launched by this app. Reuses the same path-safety validation
+  (must resolve under `ROOT_DIR`) as `POST /api/run-service`.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- `RunServiceButton` now self-schedules a poll of `/api/service-status`:
+  every 8s while idle, and every 2s for a 30s window right after a launch so the
+  indicator flips to "running" as soon as the dev server binds its port.
+- A pulsing green status dot (`.run-live-dot--on`) shows when the service is up;
+  a dim dot means stopped/unknown. The button label switches to
+  "<Service> running" and is disabled while up to prevent a redundant relaunch.
+- The poller cleans up on unmount via a `mountedRef`, so navigating away or
+  re-rendering cards never leaks timers or sets state on a dead component.
+
+### How to use
+1. Run backend and frontend as documented in `README.md`.
+2. On any project card with a backend/frontend, the new dot shows live state.
+3. Click **▶ Backend** / **▶ Frontend** — within a couple of seconds the dot
+   turns green and the label reads "running".
+
+### Notes / remaining work
+- Live status is inferred from the configured port being bound; projects with no
+  entry in `BACKEND_PORTS`/`FRONTEND_PORTS` report `configured: false` (dim dot).
+  Adding a port mapping is enough to light them up.
+- Each visible button polls independently. With the 8s idle cadence and a 0.3s
+  socket timeout this is cheap, but a single shared/batched status endpoint could
+  reduce request count if many cards are on screen at once.
+- Could not run `python`/`npm run build` here (interactive approval required in
+  this environment); changes were reviewed by hand. They are additive — the new
+  endpoint/model and the new frontend state are independent of existing flows.
+- Not committed, per instructions.

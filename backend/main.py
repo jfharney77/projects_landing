@@ -107,6 +107,15 @@ class ServiceStatus(BaseModel):
     port: int | None = None
 
 
+class LiveServiceStatus(BaseModel):
+    """Live reachability of a single project service (for quick-start buttons)."""
+    project: str
+    service: str          # 'backend' | 'frontend'
+    running: bool         # True when the known port is currently bound
+    configured: bool      # True when a port is known for this project/service
+    port: int | None = None
+
+
 class ActivityEvent(BaseModel):
     project: str          # top-level project name the file belongs to
     project_path: str     # top-level project path, relative to ROOT_DIR
@@ -1039,6 +1048,36 @@ def run_service(project_path: str, service: str) -> ServiceStatus:
             status="error",
             message=str(exc)
         )
+
+
+@app.get("/api/service-status", response_model=LiveServiceStatus)
+def service_status(project_path: str, service: str) -> LiveServiceStatus:
+    """Report whether a project's backend/frontend is currently reachable.
+
+    Used by the quick-start buttons to show live status without re-launching.
+    Status is inferred from whether the project's known port is bound, so it
+    reflects services started by *any* means (this app, a terminal, an IDE).
+    """
+    if service not in ("backend", "frontend"):
+        raise HTTPException(status_code=400, detail="service must be 'backend' or 'frontend'")
+
+    target = (ROOT_DIR / project_path).resolve()
+    if not target.exists() or not target.is_dir():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+    if ROOT_DIR.resolve() not in target.parents and target != ROOT_DIR.resolve():
+        raise HTTPException(status_code=400, detail="Invalid project path")
+
+    project_name = target.name
+    port_map = BACKEND_PORTS if service == "backend" else FRONTEND_PORTS
+    port = port_map.get(project_name)
+
+    return LiveServiceStatus(
+        project=project_name,
+        service=service,
+        running=bool(port) and _port_is_in_use(port),
+        configured=port is not None,
+        port=port,
+    )
 
 
 @app.get("/api/readme/{project_path:path}", response_class=PlainTextResponse)

@@ -1097,6 +1097,37 @@ h1 {
     cursor: default;
 }
 
+/* When a service is detected as running we override the dimmed disabled look
+   so the "running" state reads as healthy rather than unavailable. */
+.action-btn--run:disabled:has(.run-live-dot--on) {
+    opacity: 1;
+    border-color: var(--accent-2);
+    color: #b8ffd8;
+}
+
+.run-live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 0.4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    vertical-align: middle;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.run-live-dot--on {
+    background: var(--accent-2);
+    box-shadow: 0 0 6px rgba(48, 209, 139, 0.8);
+    animation: run-live-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes run-live-pulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(48, 209, 139, 0.6); }
+    50%      { box-shadow: 0 0 9px rgba(48, 209, 139, 0.95); }
+}
+
 .run-status-pill {
     font-size: 0.68rem;
     font-weight: 600;

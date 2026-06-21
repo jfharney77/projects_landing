@@ -181,6 +181,13 @@ const SERVICE_STATUS_LABELS = {
     error: { text: 'Error', color: 'var(--danger)' },
 };
 
+// Live status polling cadence for quick-start buttons. We poll faster for a
+// short window right after a launch so the indicator flips to "running" as soon
+// as the dev server binds its port, then settle into a slower idle cadence.
+const SERVICE_STATUS_POLL_MS = 8000;
+const SERVICE_STATUS_FAST_POLL_MS = 2000;
+const SERVICE_STATUS_FAST_POLL_WINDOW_MS = 30000;
+
 function encodeProjectPath(path) {
     return path.split('/').map(encodeURIComponent).join('/');
 }
@@ -1039,8 +1046,40 @@ function HealthRing({ score, signals }) {
 }
 
 function RunServiceButton({ project, service, label }) {
-    const [status, setStatus] = useState(null);
+    const [status, setStatus] = useState(null);   // transient launch-action result
     const [loading, setLoading] = useState(false);
+    const [live, setLive] = useState(null);       // { running, configured, port } | null
+    const fastUntilRef = useRef(0);               // epoch ms to poll fast until
+    const mountedRef = useRef(true);
+
+    const checkStatus = useCallback(async () => {
+        try {
+            const params = new URLSearchParams({ project_path: project.path, service });
+            const res = await fetch(`${API_BASE}/api/service-status?${params}`);
+            if (!res.ok) throw new Error(`${res.status}`);
+            const data = await res.json();
+            if (mountedRef.current) setLive(data);
+        } catch {
+            if (mountedRef.current) setLive(null);
+        }
+    }, [project.path, service]);
+
+    // Self-scheduling poll: faster for a short window after a launch, then idle.
+    useEffect(() => {
+        mountedRef.current = true;
+        let timer = null;
+        const tick = async () => {
+            await checkStatus();
+            if (!mountedRef.current) return;
+            const fast = Date.now() < fastUntilRef.current;
+            timer = setTimeout(tick, fast ? SERVICE_STATUS_FAST_POLL_MS : SERVICE_STATUS_POLL_MS);
+        };
+        tick();
+        return () => {
+            mountedRef.current = false;
+            if (timer) clearTimeout(timer);
+        };
+    }, [checkStatus]);
 
     const handleClick = useCallback(async () => {
         setLoading(true);
@@ -1051,15 +1090,26 @@ function RunServiceButton({ project, service, label }) {
             if (!res.ok) throw new Error(`${res.status}`);
             const data = await res.json();
             setStatus(data.status);
+            // Poll quickly for a while so the dot flips to "running" once it binds.
+            fastUntilRef.current = Date.now() + SERVICE_STATUS_FAST_POLL_WINDOW_MS;
+            checkStatus();
         } catch {
             setStatus('error');
         } finally {
             setLoading(false);
         }
-        setTimeout(() => setStatus(null), 4000);
-    }, [project.path, service]);
+        setTimeout(() => mountedRef.current && setStatus(null), 4000);
+    }, [project.path, service, checkStatus]);
 
     const statusInfo = status ? SERVICE_STATUS_LABELS[status] : null;
+    const running = live?.running === true;
+    const dotTitle = live == null
+        ? 'Status unknown'
+        : !live.configured
+            ? 'No known port for this service'
+            : running
+                ? `Running on port ${live.port}`
+                : 'Stopped';
 
     return (
         <span className="run-service-wrap">
@@ -1067,10 +1117,15 @@ function RunServiceButton({ project, service, label }) {
                 className="action-btn action-btn--run"
                 type="button"
                 onClick={handleClick}
-                disabled={loading}
-                title={`Launch ${label}`}
+                disabled={loading || running}
+                title={running ? `${label} already running` : `Launch ${label}`}
             >
-                {loading ? '…' : `▶ ${label}`}
+                <span
+                    className={`run-live-dot${running ? ' run-live-dot--on' : ''}`}
+                    aria-hidden="true"
+                    title={dotTitle}
+                />
+                {loading ? '…' : running ? `${label} running` : `▶ ${label}`}
             </button>
             {statusInfo && (
                 <span className="run-status-pill" style={{ color: statusInfo.color }}>
