@@ -202,3 +202,43 @@ survive reloads — no backend changes required.
   environment); changes were reviewed by hand and are purely additive — they add
   one component and one storage key without altering existing routes, fields,
   fetches, or behavior.
+
+## [Polish] Keyboard shortcut palette
+
+A help overlay documenting common dashboard actions, backed by global keyboard
+shortcuts so power users can drive the dashboard without the mouse.
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+- New `ShortcutPalette` component: a modal dialog (backdrop + centered card)
+  listing every shortcut as a `<kbd>` chip plus a description. Closes on backdrop
+  click, the ✕ button, or `Esc`. Marked up with `role="dialog"`/`aria-modal`.
+- New `SHORTCUTS` constant is the single source of truth for both the overlay
+  contents and (by convention) the keys handled in `App`.
+- Global `keydown` handler in `App`:
+  - `?` — toggle the help overlay (works on every route).
+  - `/` — focus the project search box (via a new `searchRef` passed into
+    `SearchBar`).
+  - `s` — cycle the sort order through `SORT_OPTIONS`.
+  - `a` — open the Activity Feed; `c` — open Compare Projects.
+  - `o` — open the top (first filtered/sorted) project in a new tab, preferring
+    its app URL, then repo, then README.
+  - `r` — reset search/filters/sort to defaults.
+  - `Esc` — close the overlay / blur the search field.
+- Guards: the handler ignores events with Ctrl/Cmd/Alt held and ignores action
+  keys while the user is typing in an `input`/`textarea`/`select`/contentEditable
+  (so typing `s`, `a`, `o`, etc. in the search box still works). Action keys are
+  scoped to the main dashboard route; `?` works everywhere.
+- A `⌨ Shortcuts` button was added to the hero actions, and the search input
+  placeholder now hints `(press / )`.
+- CSS: `.palette*` rules reuse the existing dark palette/accent variables, with a
+  blurred backdrop, a subtle fade-in, and keycap-styled `.palette-key` chips.
+
+### Scope / notes
+- All hooks are declared before the existing early route returns, so no
+  conditional-hook issues were introduced; the overlay is rendered inside each of
+  the four route branches so `?` can toggle it from any page.
+- Could not run `npm run build` here (interactive approval required in this
+  environment); changes were reviewed by hand and are purely additive — they add
+  one component, one constant, one ref/state pair, and a keydown effect without
+  altering existing routes, fetches, or behavior.

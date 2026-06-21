@@ -112,6 +112,63 @@ function parseComparePreselect(route) {
     }
 }
 
+// Keyboard shortcuts surfaced in the help overlay (and handled globally on the
+// main dashboard). `keys` are display labels; the matching logic lives in App.
+const SHORTCUTS = [
+    { keys: ['?'], label: 'Toggle this shortcut help' },
+    { keys: ['/'], label: 'Focus the project search box' },
+    { keys: ['s'], label: 'Cycle sort order' },
+    { keys: ['a'], label: 'Open the activity feed' },
+    { keys: ['c'], label: 'Open project comparison' },
+    { keys: ['o'], label: 'Open the top project (app, repo, or README)' },
+    { keys: ['r'], label: 'Reset search, filters, and sort' },
+    { keys: ['Esc'], label: 'Close this help / blur the search box' },
+];
+
+function ShortcutPalette({ onClose }) {
+    // Close on Escape regardless of focus while the overlay is mounted.
+    useEffect(() => {
+        function onKey(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return (
+        <div className="palette-backdrop" onClick={onClose} role="presentation">
+            <div
+                className="palette"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Keyboard shortcuts"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="palette-head">
+                    <h2>Keyboard Shortcuts</h2>
+                    <button className="palette-close" type="button" onClick={onClose} aria-label="Close">✕</button>
+                </div>
+                <ul className="palette-list">
+                    {SHORTCUTS.map((s) => (
+                        <li className="palette-row" key={s.label}>
+                            <span className="palette-keys">
+                                {s.keys.map((k) => (
+                                    <kbd className="palette-key" key={k}>{k}</kbd>
+                                ))}
+                            </span>
+                            <span className="palette-desc">{s.label}</span>
+                        </li>
+                    ))}
+                </ul>
+                <p className="palette-foot">Shortcuts work on the dashboard while you're not typing in a field.</p>
+            </div>
+        </div>
+    );
+}
+
 const NOTES_STORAGE_KEY = 'projects-landing:notes';
 const NOTES_MAX_LENGTH = 2000;
 const NOTES_SAVE_DEBOUNCE_MS = 500;
@@ -639,15 +696,17 @@ function SearchBar({
     totalCount,
     onReset,
     canReset,
+    searchRef,
 }) {
     return (
         <div className="search-bar">
             <div className="search-input-wrap">
                 <span className="search-icon">⌕</span>
                 <input
+                    ref={searchRef}
                     type="search"
                     className="search-input"
-                    placeholder="Search projects…"
+                    placeholder="Search projects… (press / )"
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
                     aria-label="Search projects"
@@ -960,6 +1019,8 @@ function App() {
     const [repoFilter, setRepoFilter] = useState(() => loadStoredFilters().repoFilter);
     const [techFilter, setTechFilter] = useState(() => loadStoredFilters().techFilter);
     const [sortBy, setSortBy] = useState(() => loadStoredFilters().sortBy);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+    const searchRef = useRef(null);
 
     const filtersAtDefault =
         query === DEFAULT_FILTERS.query &&
@@ -1162,6 +1223,71 @@ function App() {
         return { total, withGit };
     }, [allLeaves]);
 
+    // The first project in the current (filtered, sorted) list — target of the
+    // "open top project" shortcut.
+    const topLeaf = useMemo(() => {
+        const first = filteredProjects[0];
+        if (!first) return null;
+        return first.children && first.children.length > 0 ? first.children[0] : first;
+    }, [filteredProjects]);
+
+    const openTopProject = useCallback(() => {
+        if (!topLeaf) return;
+        const href = topLeaf.app_url || topLeaf.git_remote_url || topLeaf.readme_url
+            || (topLeaf.has_readme ? `${API_BASE}/api/readme/${encodeProjectPath(topLeaf.path)}` : '');
+        if (href) window.open(href, '_blank', 'noopener');
+    }, [topLeaf]);
+
+    // Global keyboard shortcuts. `?` toggles help everywhere; the action keys are
+    // only live on the main dashboard and are ignored while typing in a field.
+    useEffect(() => {
+        function onKeyDown(e) {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            const el = e.target;
+            const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+                || el.tagName === 'SELECT' || el.isContentEditable);
+
+            if (e.key === '?') {
+                e.preventDefault();
+                setPaletteOpen((o) => !o);
+                return;
+            }
+            if (typing) return;
+            // Action shortcuts only apply on the main dashboard route.
+            if (route !== '' && route !== '#') return;
+
+            switch (e.key) {
+                case '/':
+                    e.preventDefault();
+                    searchRef.current?.focus();
+                    break;
+                case 's':
+                    setSortBy((prev) => {
+                        const i = SORT_OPTIONS.findIndex((o) => o.value === prev);
+                        return SORT_OPTIONS[(i + 1) % SORT_OPTIONS.length].value;
+                    });
+                    break;
+                case 'a':
+                    window.location.hash = ACTIVITY_HASH;
+                    break;
+                case 'c':
+                    window.location.hash = COMPARE_HASH;
+                    break;
+                case 'r':
+                    resetFilters();
+                    break;
+                case 'o':
+                    openTopProject();
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [route, resetFilters, openTopProject]);
+
     if (route === COMPARE_HASH || route.startsWith(`${COMPARE_HASH}/`)) {
         return (
             <div className="page">
@@ -1173,6 +1299,7 @@ function App() {
                         setRoute('');
                     }}
                 />
+                {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             </div>
         );
     }
@@ -1192,6 +1319,7 @@ function App() {
                         setRoute('');
                     }}
                 />
+                {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             </div>
         );
     }
@@ -1208,6 +1336,7 @@ function App() {
                         setRoute('');
                     }}
                 />
+                {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             </div>
         );
     }
@@ -1245,6 +1374,14 @@ function App() {
                     >
                         ⚖ Compare Projects
                     </button>
+                    <button
+                        className="action-btn"
+                        type="button"
+                        onClick={() => setPaletteOpen(true)}
+                        title="Show keyboard shortcuts (press ?)"
+                    >
+                        ⌨ Shortcuts
+                    </button>
                 </div>
             </header>
 
@@ -1267,6 +1404,7 @@ function App() {
                         totalCount={allLeaves.length}
                         onReset={resetFilters}
                         canReset={!filtersAtDefault}
+                        searchRef={searchRef}
                     />
                     <main className="top-list">
                         {filteredProjects.length === 0 && (
@@ -1280,6 +1418,7 @@ function App() {
                     </main>
                 </>
             )}
+            {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
         </div>
     );
 }
