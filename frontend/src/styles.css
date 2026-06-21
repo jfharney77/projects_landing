@@ -329,12 +329,42 @@ h1 {
     gap: 0.9rem;
 }
 
+@keyframes card-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .project-card {
     background: linear-gradient(160deg, rgba(19, 27, 52, 0.9), rgba(17, 21, 38, 0.95));
     border: 1px solid var(--card-border);
     border-radius: 14px;
     padding: 1rem;
     min-height: 172px;
+}
+
+.project-card:not(.skeleton-card) {
+    animation: card-in 0.32s ease-out both;
+    animation-delay: var(--card-delay, 0ms);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.project-card:not(.skeleton-card):hover {
+    transform: translateY(-2px);
+    border-color: rgba(60, 182, 255, 0.45);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(60, 182, 255, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .project-card:not(.skeleton-card) {
+        animation: none;
+        transition: none;
+    }
 }
 
 .card-top {

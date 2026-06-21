@@ -366,3 +366,40 @@ Supported fields:
   `/api/scan-config`, and hot-reload `walk_skip_dirs` (currently the deep-walk set is
   computed once at import; the top-level include/ignore rules already hot-reload).
 
+## [Polish] Project card animations — smooth in/fade transitions on load
+
+Staggered entrance animation for project cards and a subtle hover lift, making the
+dashboard feel polished and alive rather than snapping in all at once.
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+
+#### CSS (`frontend/src/styles.css`)
+- New `@keyframes card-in`: fades each card from `opacity: 0` + `translateY(12px)` to
+  fully visible, over 320 ms with `ease-out`.
+- Applied to `.project-card:not(.skeleton-card)` so skeleton loading cards (which
+  already have a shimmer) are excluded.
+- `animation-delay` is driven by a `--card-delay` CSS custom property set inline from
+  React, capped at 450 ms so long lists don't make the last card wait forever.
+- Hover state: `translateY(-2px)` lift + accent-tinted `box-shadow` + slightly brighter
+  `border-color`, transitioning over 180 ms — provides tactile feedback without being
+  flashy.
+- `@media (prefers-reduced-motion: reduce)` block strips both the entrance animation
+  and the hover transition, respecting user accessibility preferences.
+
+#### React (`frontend/src/App.jsx`)
+- `ProjectCard` accepts a new optional `cardIndex` prop (default 0). Computes
+  `--card-delay` as `min(cardIndex × 50ms, 450ms)` and sets it as an inline `style`.
+- `ProjectGroup` accepts `baseIndex` and adds it to each child's `j` index before
+  passing `cardIndex={baseIndex + j}` to its `ProjectCard`s — so group children
+  continue the stagger from the group's visual position in the list.
+- The main render loop passes `cardIndex={i}` to top-level leaf cards and
+  `baseIndex={i}` to groups.
+
+### Scope / notes
+- No backend changes, no new dependencies.
+- The stagger offset (`baseIndex` in groups) is an approximation — groups containing
+  many children could produce slightly uneven pacing, but it's imperceptible in practice.
+- Could not run `npm run build` here (interactive approval required in this
+  environment); changes were reviewed by hand and are purely additive.
+

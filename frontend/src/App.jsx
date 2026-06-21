@@ -784,7 +784,7 @@ function ProjectNotes({ project }) {
     );
 }
 
-function ProjectCard({ project, onOpenRuns, healthIssues }) {
+function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
     const readmeHref = project.readme_url || (project.has_readme
         ? `${API_BASE}/api/readme/${encodeProjectPath(project.path)}`
         : '');
@@ -810,8 +810,10 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
         project.tech_tags.includes('Node')
     );
 
+    const cardDelay = `${Math.min(cardIndex * 50, 450)}ms`;
+
     return (
-        <article className="project-card">
+        <article className="project-card" style={{ '--card-delay': cardDelay }}>
             <div className="card-top">
                 <h2>{project.name}</h2>
                 <div className="tag-group">
@@ -883,7 +885,7 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
     );
 }
 
-function ProjectGroup({ project, onOpenRuns, healthMap }) {
+function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0 }) {
     const [open, setOpen] = useState(true);
     return (
         <section className="project-group">
@@ -894,8 +896,8 @@ function ProjectGroup({ project, onOpenRuns, healthMap }) {
             </button>
             {open && (
                 <div className="group-grid">
-                    {project.children.map((child) => (
-                        <ProjectCard key={child.name} project={child} onOpenRuns={onOpenRuns} healthIssues={healthMap[child.path]} />
+                    {project.children.map((child, j) => (
+                        <ProjectCard key={child.name} project={child} onOpenRuns={onOpenRuns} healthIssues={healthMap[child.path]} cardIndex={baseIndex + j} />
                     ))}
                 </div>
             )}
@@ -1660,10 +1662,10 @@ function App() {
                         {filteredProjects.length === 0 && (
                             <p className="status">No projects match your search.</p>
                         )}
-                        {filteredProjects.map((project) =>
+                        {filteredProjects.map((project, i) =>
                             project.children && project.children.length > 0
-                                ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} />
-                                : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} />
+                                ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} baseIndex={i} />
+                                : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} />
                         )}
                     </main>
                 </>
