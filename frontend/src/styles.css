@@ -1990,3 +1990,85 @@ h1 {
         margin-left: 0;
     }
 }
+
+/* ── Skeleton card placeholders ─────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+    0%   { background-position: -800px 0; }
+    100% { background-position:  800px 0; }
+}
+
+@keyframes content-fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.skeleton-card {
+    pointer-events: none;
+    user-select: none;
+}
+
+.skeleton-line {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg,
+        rgba(48, 58, 103, 0.35) 25%,
+        rgba(72, 88, 152, 0.58) 50%,
+        rgba(48, 58, 103, 0.35) 75%
+    );
+    background-size: 1600px 100%;
+    animation: skeleton-shimmer 1.8s infinite linear;
+    animation-delay: var(--skeleton-delay, 0s);
+}
+
+.skeleton-title {
+    height: 1.05rem;
+    width: 52%;
+}
+
+.skeleton-tag {
+    height: 1.5rem;
+    width: 5rem;
+    border-radius: 999px;
+}
+
+.skeleton-text {
+    height: 0.82rem;
+    width: 90%;
+    margin-top: 0.65rem;
+}
+
+.skeleton-text.short {
+    width: 65%;
+}
+
+.skeleton-meta {
+    height: 0.7rem;
+    width: 48%;
+    margin-top: 0.75rem;
+}
+
+.skeleton-pill {
+    height: 1.5rem;
+    width: 4.2rem;
+    border-radius: 999px;
+}
+
+.skeleton-list {
+    animation: content-fade-in 0.18s ease-out;
+}
+
+.dashboard-content {
+    animation: content-fade-in 0.24s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+        animation: none;
+        background: rgba(48, 58, 103, 0.38);
+    }
+    .skeleton-list,
+    .dashboard-content {
+        animation: none;
+    }
+}

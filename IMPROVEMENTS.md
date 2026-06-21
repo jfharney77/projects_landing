@@ -815,3 +815,34 @@ breakdown behind the number.
 - **Not verified at runtime in this session** — the sandbox blocked Python/`npm`
   execution, so `test_health_score.py` and the Vite build were written/reviewed but
   not run here. Both are expected to pass; run them before relying on the feature.
+
+## [Polish] Skeleton card placeholders — Smoother list transitions
+
+Replaced the plain "Loading projects…" text with animated skeleton card
+placeholders that mirror the real card layout, giving the list a smooth feel
+while the API response arrives.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+
+**App.jsx**
+- `SkeletonCard` now accepts an `index` prop and sets `--skeleton-delay` on the
+  card element; each card's shimmer animation is offset by `index × 80 ms`,
+  producing a left-to-right wave across the list.
+- `SkeletonList` default count raised from 6 → 8 (fills most viewports);
+  adds `.skeleton-list` class so it fades in smoothly.
+- Dashboard main render restructured: `loading` state renders `<SkeletonList />`
+  directly; the full content (heatmap, search bar, real cards) is wrapped in
+  `<div className="dashboard-content">` which fades/slides in with
+  `content-fade-in` (0.24 s, 6 px rise).
+
+**styles.css**
+- `@keyframes skeleton-shimmer` — a 1.8 s linear horizontal gradient sweep
+  (`1600 px` wide track so the highlight glides visibly across each line).
+- `@keyframes content-fade-in` — shared by `.skeleton-list` and
+  `.dashboard-content`; opacity 0→1 plus a 6 px translateY lift.
+- Per-element skeleton rules: `.skeleton-title`, `.skeleton-tag`,
+  `.skeleton-text` / `.short`, `.skeleton-meta`, `.skeleton-pill` — each
+  sized to approximate the real card element it stands in for.
+- `@media (prefers-reduced-motion)` block: shimmer animation replaced with a
+  static muted fill; `skeleton-list` and `dashboard-content` transitions
+  removed entirely.

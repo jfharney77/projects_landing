@@ -652,9 +652,13 @@ function loadStoredFilters() {
     }
 }
 
-function SkeletonCard() {
+function SkeletonCard({ index = 0 }) {
     return (
-        <article className="project-card skeleton-card" aria-hidden="true">
+        <article
+            className="project-card skeleton-card"
+            aria-hidden="true"
+            style={{ '--skeleton-delay': `${index * 0.08}s` }}
+        >
             <div className="card-top">
                 <span className="skeleton-line skeleton-title" />
                 <span className="skeleton-line skeleton-tag" />
@@ -671,11 +675,11 @@ function SkeletonCard() {
     );
 }
 
-function SkeletonList({ count = 6 }) {
+function SkeletonList({ count = 8 }) {
     return (
-        <div className="top-list" aria-busy="true" aria-label="Loading projects">
+        <div className="top-list skeleton-list" aria-busy="true" aria-label="Loading projects">
             {Array.from({ length: count }, (_, i) => (
-                <SkeletonCard key={i} />
+                <SkeletonCard key={i} index={i} />
             ))}
         </div>
     );
@@ -2567,11 +2571,12 @@ function App() {
                 </div>
             </header>
 
-            {loading && <p className="status">Loading projects...</p>}
             {error && <p className="status error">{error}</p>}
 
-            {!loading && !error && (
-                <>
+            {!error && loading && <SkeletonList />}
+
+            {!error && !loading && (
+                <div className="dashboard-content">
                     <FreshnessHeatmap leaves={allLeaves} />
                     <StackOverlapMatrix
                         leaves={allLeaves}
@@ -2625,7 +2630,7 @@ function App() {
                                     : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} readmeMatch={readmeMatches[project.path]} query={query} />
                             )}
                     </main>
-                </>
+                </div>
             )}
             {groupRulesOpen && (
                 <GroupRulesModal
