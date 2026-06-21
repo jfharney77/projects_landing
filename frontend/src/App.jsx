@@ -938,6 +938,15 @@ function SearchBar({
                     placeholder="Search projects… (press / )"
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Esc mirrors GitHub: clear a non-empty query first, then
+                        // blur so keyboard focus returns to the page.
+                        if (e.key === 'Escape') {
+                            e.preventDefault();
+                            if (query) onQuery('');
+                            else e.currentTarget.blur();
+                        }
+                    }}
                     aria-label="Search projects"
                 />
                 {query && (

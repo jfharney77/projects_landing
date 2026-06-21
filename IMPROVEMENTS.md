@@ -286,3 +286,31 @@ human-readable Markdown (for pasting into a doc/ticket) or JSON (for tooling).
   helper functions, one modal component, one state pair, one hero button, one
   shortcut, and a CSS block — no existing routes, fetches, or components changed.
 
+
+## "/" Focuses the Search Box (GitHub-style)
+
+Pressing `/` anywhere on the dashboard now jumps focus straight to the project
+search box, like GitHub. Pressing `Esc` while in the box completes the round-trip
+back out.
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`).
+- The `/` shortcut itself was already wired in the global keydown handler
+  (`searchRef.current?.focus()`), documented in the shortcut palette, and the
+  search input shows a `(press / )` hint in its placeholder — that path was
+  verified intact and left as-is.
+- **Filled the documented-but-missing gap:** the palette promised
+  *"Esc … blur the search box"*, but nothing implemented it (the global handler
+  bails out of action shortcuts while typing, and the input had no `Esc` handler).
+  Added an `onKeyDown` to the search `<input>`: `Esc` clears a non-empty query
+  first, then blurs on the next press — matching GitHub's search behavior and the
+  palette's own description.
+
+### Scope / notes
+- No backend changes, no new dependencies. The `/` handler already guards against
+  firing while the user is typing in a field and is scoped to the main dashboard
+  route, so the shortcut never steals a literal `/` typed into the search box.
+- Could not run `npm run build` / `esbuild` here (interactive approval required in
+  this environment). The change is a single additive `onKeyDown` handler on the
+  existing search input, following the same `e.key === 'Escape'` pattern used by
+  the modals in this file; reviewed by hand.
