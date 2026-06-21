@@ -403,3 +403,64 @@ dashboard feel polished and alive rather than snapping in all at once.
 - Could not run `npm run build` here (interactive approval required in this
   environment); changes were reviewed by hand and are purely additive.
 
+
+## [New capability] Project milestone tracker — set and track goals per project
+
+Each project card now has a **🎯 Goals** button that opens an inline tracker for
+setting per-project goals (with optional target dates), checking them off, and
+seeing live progress. Unlike the localStorage-backed Notes, milestones are stored
+server-side so they persist across restarts and are shared across browsers.
+
+### What changed
+- **Backend** (`backend/main.py`): new milestone models, a JSON-file store, and a
+  small CRUD + progress API.
+- **Frontend** (`frontend/src/App.jsx`, `frontend/src/styles.css`): a new
+  `ProjectMilestones` component rendered in each card's action row.
+- **Test** (`backend/test_milestones.py`): dependency-free smoke tests.
+- `.gitignore`: ignores the runtime data file `backend/milestones.json`.
+
+#### Backend (`backend/main.py`)
+- New Pydantic models: `Milestone` (id, project_path, title, due_date, done,
+  created_at, completed_at), `CreateMilestoneRequest`, `UpdateMilestoneRequest`,
+  and `MilestoneProgress` (total / done / overdue / next_due).
+- Persistence: goals live in `backend/milestones.json` (a flat JSON list).
+  `load_milestones()` tolerates a missing/corrupt file; `save_milestones()` writes
+  atomically via a temp file + `os.replace`.
+- Endpoints:
+  - `GET /api/milestones[?project_path=…]` — list, ordered open-first (soonest due
+    date first, undated last), completed goals last.
+  - `GET /api/milestones/progress` — per-project counts for badge/summary use.
+  - `POST /api/milestones` — add a goal (title required, ≤200 chars; optional
+    `due_date` validated as strict `YYYY-MM-DD`).
+  - `PATCH /api/milestones/{id}` — edit title/due date or toggle `done`. Marking
+    done stamps `completed_at` once; clearing done resets it.
+  - `DELETE /api/milestones/{id}` — remove a goal.
+- All project paths are validated through the existing `_resolve_project_dir()`
+  helper, so the same path-traversal guard used elsewhere applies here.
+
+#### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- `ProjectMilestones` is self-contained (mirroring `ProjectNotes`) and loads its
+  project's goals on mount so the button shows live `done/total` progress without
+  being opened. An ⚠ marker and red tint appear when any open goal is overdue.
+- The open panel shows a progress bar + %, the goal list (checkbox, title with
+  strike-through when done, due/overdue label, delete ✕), and an add form with a
+  text input and optional date picker.
+- Toggle and delete are optimistic with revert-on-failure; add appends the
+  server-created record. Errors surface inline.
+- Styling reuses the existing card/action vocabulary (`--accent-2` for progress and
+  checkboxes, `--danger` for overdue/delete) and a new `.action-btn--overdue` accent.
+
+### Scope / notes
+- Goals are tracked for both top-level and expandable child projects (the tracker
+  rides on every `ProjectCard`).
+- One `GET /api/milestones` fetch per card on load — fine for a local dashboard of
+  this size. A future optimization is to hydrate all cards from a single
+  `GET /api/milestones/progress` call at the app level (the endpoint already exists).
+- Not yet wired: editing an existing goal's title/date in place (delete + re-add for
+  now), and surfacing milestone progress in the dashboard stats / export snapshot.
+- Could not run `npm run build`, `pytest`, or the backend in this environment
+  (command execution required interactive approval here). Changes were verified by
+  careful review; `backend/test_milestones.py` exercises the full lifecycle
+  (create → list → toggle → clear → delete), input validation, and progress counts,
+  and runs with only the backend's existing deps via
+  `./.venv/bin/python test_milestones.py`.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import uuid
 import fnmatch
 import subprocess
 import shutil
@@ -150,6 +151,37 @@ class SaveReadmeResponse(BaseModel):
     project: str
     path: str           # path of the written README, relative to ROOT_DIR
     bytes_written: int
+
+
+class Milestone(BaseModel):
+    id: str
+    project_path: str          # project the goal belongs to, relative to ROOT_DIR
+    title: str
+    due_date: str = ""         # optional YYYY-MM-DD target date ('' if none)
+    done: bool = False
+    created_at: str            # ISO timestamp
+    completed_at: str = ""     # ISO timestamp set when first marked done
+
+
+class CreateMilestoneRequest(BaseModel):
+    project_path: str
+    title: str
+    due_date: str = ""
+
+
+class UpdateMilestoneRequest(BaseModel):
+    # All optional — only provided fields are changed.
+    title: str | None = None
+    due_date: str | None = None
+    done: bool | None = None
+
+
+class MilestoneProgress(BaseModel):
+    project_path: str
+    total: int
+    done: int
+    overdue: int               # open milestones whose due_date is in the past
+    next_due: str = ""         # earliest upcoming due_date among open milestones
 
 
 app = FastAPI(title="Projects Landing API", version="0.1.0")
@@ -1164,6 +1196,165 @@ def list_last_second_runs() -> list[LastSecondRunSummary]:
         )
 
     return runs
+
+
+# ── Milestone tracker: per-project goals with optional due dates ─────────────
+# Goals are persisted in a single JSON file next to the backend so they survive
+# restarts and are shared across browsers (unlike the localStorage-backed notes).
+MILESTONES_FILE = Path(__file__).resolve().parent / "milestones.json"
+MILESTONE_TITLE_MAX = 200
+
+
+def load_milestones() -> list[dict]:
+    """Read all milestones from disk; a missing/corrupt file yields an empty list."""
+    if not MILESTONES_FILE.exists():
+        return []
+    try:
+        raw = json.loads(MILESTONES_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else []
+
+
+def save_milestones(milestones: list[dict]) -> None:
+    """Atomically persist milestones to disk (write-temp-then-replace)."""
+    tmp = MILESTONES_FILE.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(milestones, indent=2), encoding="utf-8")
+        tmp.replace(MILESTONES_FILE)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to persist milestones: {exc}")
+
+
+def _validate_due_date(due_date: str) -> str:
+    """Normalise an optional due date; accept '' or a strict YYYY-MM-DD string."""
+    due_date = (due_date or "").strip()
+    if not due_date:
+        return ""
+    try:
+        datetime.strptime(due_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="due_date must be in YYYY-MM-DD format.")
+    return due_date
+
+
+def _progress_for(project_rel: str, milestones: list[dict]) -> MilestoneProgress:
+    """Compute the progress summary for a single project's milestones."""
+    today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    total = done = overdue = 0
+    upcoming: list[str] = []
+    for m in milestones:
+        if m.get("project_path") != project_rel:
+            continue
+        total += 1
+        if m.get("done"):
+            done += 1
+            continue
+        due = m.get("due_date") or ""
+        if due:
+            if due < today:
+                overdue += 1
+            else:
+                upcoming.append(due)
+    return MilestoneProgress(
+        project_path=project_rel,
+        total=total,
+        done=done,
+        overdue=overdue,
+        next_due=min(upcoming) if upcoming else "",
+    )
+
+
+@app.get("/api/milestones", response_model=list[Milestone])
+def list_milestones(project_path: str | None = None) -> list[Milestone]:
+    """List milestones, optionally filtered to a single project.
+
+    Results are ordered: open goals first (soonest due date first, undated last),
+    then completed goals — so the most actionable items surface at the top.
+    """
+    milestones = load_milestones()
+    if project_path is not None:
+        rel = str(_resolve_project_dir(project_path).relative_to(ROOT_DIR))
+        milestones = [m for m in milestones if m.get("project_path") == rel]
+
+    def sort_key(m: dict) -> tuple:
+        done = bool(m.get("done"))
+        due = m.get("due_date") or "9999-99-99"  # undated goals sink below dated ones
+        return (done, due, m.get("created_at", ""))
+
+    return [Milestone(**m) for m in sorted(milestones, key=sort_key)]
+
+
+@app.get("/api/milestones/progress", response_model=list[MilestoneProgress])
+def milestones_progress() -> list[MilestoneProgress]:
+    """Return per-project goal progress for every project that has milestones."""
+    milestones = load_milestones()
+    projects = {m.get("project_path", "") for m in milestones if m.get("project_path")}
+    return [_progress_for(p, milestones) for p in sorted(projects)]
+
+
+@app.post("/api/milestones", response_model=Milestone)
+def create_milestone(req: CreateMilestoneRequest) -> Milestone:
+    """Add a goal to a project."""
+    rel = str(_resolve_project_dir(req.project_path).relative_to(ROOT_DIR))
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Milestone title cannot be empty.")
+    if len(title) > MILESTONE_TITLE_MAX:
+        title = title[:MILESTONE_TITLE_MAX].rstrip()
+
+    milestone = Milestone(
+        id=uuid.uuid4().hex,
+        project_path=rel,
+        title=title,
+        due_date=_validate_due_date(req.due_date),
+        done=False,
+        created_at=datetime.now(tz=timezone.utc).isoformat(),
+    )
+    milestones = load_milestones()
+    milestones.append(milestone.model_dump())
+    save_milestones(milestones)
+    return milestone
+
+
+@app.patch("/api/milestones/{milestone_id}", response_model=Milestone)
+def update_milestone(milestone_id: str, req: UpdateMilestoneRequest) -> Milestone:
+    """Edit a goal's title/due date or toggle its done state.
+
+    Marking a goal done stamps completed_at the first time; clearing done resets it.
+    """
+    milestones = load_milestones()
+    for m in milestones:
+        if m.get("id") != milestone_id:
+            continue
+        if req.title is not None:
+            title = req.title.strip()
+            if not title:
+                raise HTTPException(status_code=400, detail="Milestone title cannot be empty.")
+            m["title"] = title[:MILESTONE_TITLE_MAX].rstrip()
+        if req.due_date is not None:
+            m["due_date"] = _validate_due_date(req.due_date)
+        if req.done is not None:
+            m["done"] = bool(req.done)
+            if req.done:
+                if not m.get("completed_at"):
+                    m["completed_at"] = datetime.now(tz=timezone.utc).isoformat()
+            else:
+                m["completed_at"] = ""
+        save_milestones(milestones)
+        return Milestone(**m)
+    raise HTTPException(status_code=404, detail="Milestone not found")
+
+
+@app.delete("/api/milestones/{milestone_id}")
+def delete_milestone(milestone_id: str) -> dict[str, str]:
+    """Remove a goal."""
+    milestones = load_milestones()
+    remaining = [m for m in milestones if m.get("id") != milestone_id]
+    if len(remaining) == len(milestones):
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    save_milestones(remaining)
+    return {"status": "deleted", "id": milestone_id}
 
 
 def build_project(project_dir: Path) -> ProjectSummary:

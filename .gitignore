@@ -12,3 +12,7 @@ dist/
 
 # Misc
 .DS_Store
+
+# Milestone tracker data (per-project goals, written at runtime)
+backend/milestones.json
+backend/milestones.json.tmp

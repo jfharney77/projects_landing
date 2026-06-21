@@ -784,6 +784,200 @@ function ProjectNotes({ project }) {
     );
 }
 
+const MILESTONE_TITLE_MAX = 200;
+
+// Format an ISO 'YYYY-MM-DD' due date as a short, friendly label.
+function formatDueDate(iso) {
+    if (!iso) return '';
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Today's date as 'YYYY-MM-DD' (local) — used to flag overdue goals in the UI.
+function todayIso() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Per-project goal tracker. Self-contained like ProjectNotes, but server-backed
+// (goals persist across browsers via the /api/milestones endpoints). Loads on
+// mount so the button can show live done/total progress without being opened.
+function ProjectMilestones({ project }) {
+    const [open, setOpen] = useState(false);
+    const [milestones, setMilestones] = useState([]);
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState('');
+    const [title, setTitle] = useState('');
+    const [due, setDue] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const load = useCallback(async () => {
+        try {
+            const res = await fetch(
+                `${API_BASE}/api/milestones?project_path=${encodeURIComponent(project.path)}`,
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            setMilestones(await res.json());
+            setError('');
+        } catch {
+            setError('Could not load goals');
+        } finally {
+            setLoaded(true);
+        }
+    }, [project.path]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const total = milestones.length;
+    const doneCount = milestones.filter((m) => m.done).length;
+    const today = todayIso();
+    const overdue = milestones.filter((m) => !m.done && m.due_date && m.due_date < today).length;
+    const pct = total ? Math.round((doneCount / total) * 100) : 0;
+
+    const addGoal = async (e) => {
+        e.preventDefault();
+        const text = title.trim();
+        if (!text || busy) return;
+        setBusy(true);
+        try {
+            const res = await fetch(`${API_BASE}/api/milestones`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_path: project.path, title: text, due_date: due }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const created = await res.json();
+            setMilestones((prev) => [...prev, created]);
+            setTitle('');
+            setDue('');
+            setError('');
+        } catch {
+            setError('Could not add goal');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const toggleGoal = async (m) => {
+        // Optimistic flip; revert on failure.
+        setMilestones((prev) => prev.map((x) => (x.id === m.id ? { ...x, done: !x.done } : x)));
+        try {
+            const res = await fetch(`${API_BASE}/api/milestones/${m.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ done: !m.done }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const updated = await res.json();
+            setMilestones((prev) => prev.map((x) => (x.id === m.id ? updated : x)));
+        } catch {
+            setMilestones((prev) => prev.map((x) => (x.id === m.id ? m : x)));
+            setError('Could not update goal');
+        }
+    };
+
+    const deleteGoal = async (m) => {
+        const prev = milestones;
+        setMilestones((cur) => cur.filter((x) => x.id !== m.id));
+        try {
+            const res = await fetch(`${API_BASE}/api/milestones/${m.id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch {
+            setMilestones(prev);
+            setError('Could not delete goal');
+        }
+    };
+
+    const hasGoals = total > 0;
+    const label = hasGoals ? `🎯 Goals ${doneCount}/${total}` : '🎯 Goals';
+
+    return (
+        <div className="project-milestones">
+            <button
+                className={`action-btn${hasGoals ? ' action-btn--has-note' : ''}${overdue ? ' action-btn--overdue' : ''}`}
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                title={overdue ? `${overdue} overdue goal${overdue === 1 ? '' : 's'}` : 'Set and track goals for this project'}
+                aria-expanded={open}
+            >
+                {label}{overdue ? ' ⚠' : ''}
+            </button>
+            {open && (
+                <div className="milestones-panel">
+                    {hasGoals && (
+                        <div className="milestones-progress" aria-label={`${doneCount} of ${total} goals complete`}>
+                            <div className="milestones-bar">
+                                <span className="milestones-bar-fill" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="milestones-progress-label">{pct}%</span>
+                        </div>
+                    )}
+                    <ul className="milestones-list">
+                        {milestones.map((m) => {
+                            const isOverdue = !m.done && m.due_date && m.due_date < today;
+                            return (
+                                <li key={m.id} className={`milestone-item${m.done ? ' milestone-item--done' : ''}`}>
+                                    <label className="milestone-check">
+                                        <input
+                                            type="checkbox"
+                                            checked={m.done}
+                                            onChange={() => toggleGoal(m)}
+                                            aria-label={`Mark "${m.title}" ${m.done ? 'not done' : 'done'}`}
+                                        />
+                                        <span className="milestone-title">{m.title}</span>
+                                    </label>
+                                    {m.due_date && (
+                                        <span className={`milestone-due${isOverdue ? ' milestone-due--overdue' : ''}`}>
+                                            {isOverdue ? 'Overdue ' : 'Due '}{formatDueDate(m.due_date)}
+                                        </span>
+                                    )}
+                                    <button
+                                        className="milestone-delete"
+                                        type="button"
+                                        onClick={() => deleteGoal(m)}
+                                        title="Delete goal"
+                                        aria-label={`Delete goal "${m.title}"`}
+                                    >
+                                        ✕
+                                    </button>
+                                </li>
+                            );
+                        })}
+                        {loaded && !hasGoals && (
+                            <li className="milestones-empty">No goals yet — add one below.</li>
+                        )}
+                    </ul>
+                    <form className="milestone-add" onSubmit={addGoal}>
+                        <input
+                            className="milestone-input"
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value.slice(0, MILESTONE_TITLE_MAX))}
+                            placeholder="New goal…"
+                            maxLength={MILESTONE_TITLE_MAX}
+                            aria-label={`New goal for ${project.name}`}
+                        />
+                        <input
+                            className="milestone-date"
+                            type="date"
+                            value={due}
+                            onChange={(e) => setDue(e.target.value)}
+                            title="Optional target date"
+                            aria-label="Optional target date"
+                        />
+                        <button className="action-btn" type="submit" disabled={busy || !title.trim()}>
+                            Add
+                        </button>
+                    </form>
+                    {error && <span className="milestones-error">{error}</span>}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
     const readmeHref = project.readme_url || (project.has_readme
         ? `${API_BASE}/api/readme/${encodeProjectPath(project.path)}`
@@ -879,6 +1073,7 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
                     ⚖ Compare
                 </button>
                 <button className="action-btn" type="button" onClick={copyPath}>Copy Path</button>
+                <ProjectMilestones project={project} />
                 <ProjectNotes project={project} />
             </div>
         </article>

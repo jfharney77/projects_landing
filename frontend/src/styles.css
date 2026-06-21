@@ -540,6 +540,182 @@ h1 {
     font-variant-numeric: tabular-nums;
 }
 
+/* ── Milestone tracker ──────────────────────────────────────────────────── */
+.project-milestones {
+    display: contents;
+}
+
+.action-btn--overdue {
+    border-color: rgba(255, 138, 138, 0.6);
+    background: rgba(255, 138, 138, 0.14);
+    color: #ffd9d9;
+}
+
+.milestones-panel {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.milestones-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.milestones-bar {
+    flex: 1;
+    height: 7px;
+    border-radius: 999px;
+    background: rgba(174, 183, 223, 0.18);
+    overflow: hidden;
+}
+
+.milestones-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-2);
+    transition: width 0.3s ease;
+}
+
+.milestones-progress-label {
+    font-size: 0.7rem;
+    color: #8fa0d8;
+    font-variant-numeric: tabular-nums;
+}
+
+.milestones-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.milestone-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.45rem;
+    border-radius: 8px;
+    background: rgba(12, 18, 38, 0.5);
+    border: 1px solid rgba(174, 183, 223, 0.18);
+}
+
+.milestone-check {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.milestone-check input {
+    cursor: pointer;
+    accent-color: var(--accent-2);
+}
+
+.milestone-title {
+    font-size: 0.84rem;
+    color: #e6ecff;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.milestone-item--done .milestone-title {
+    text-decoration: line-through;
+    color: #8fa0d8;
+}
+
+.milestone-due {
+    font-size: 0.68rem;
+    letter-spacing: 0.3px;
+    color: #8fa0d8;
+    white-space: nowrap;
+}
+
+.milestone-due--overdue {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+.milestone-delete {
+    border: none;
+    background: transparent;
+    color: #7d8bbf;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    padding: 0.1rem 0.25rem;
+    border-radius: 6px;
+}
+
+.milestone-delete:hover {
+    color: var(--danger);
+    background: rgba(255, 138, 138, 0.12);
+}
+
+.milestones-empty {
+    font-size: 0.78rem;
+    color: #7d8bbf;
+    font-style: italic;
+    padding: 0.2rem 0.1rem;
+}
+
+.milestone-add {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.milestone-input,
+.milestone-date {
+    box-sizing: border-box;
+    border-radius: 8px;
+    border: 1px solid rgba(174, 183, 223, 0.35);
+    background: rgba(12, 18, 38, 0.6);
+    color: #e6ecff;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.milestone-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.milestone-input:focus,
+.milestone-date:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(12, 18, 38, 0.85);
+}
+
+.milestone-input::placeholder {
+    color: #7d8bbf;
+}
+
+.milestone-date {
+    color-scheme: dark;
+}
+
+.milestone-add .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.milestones-error {
+    font-size: 0.72rem;
+    color: var(--danger);
+}
+
 .tag {
     border-radius: 999px;
     padding: 0.22rem 0.62rem;
