@@ -41,3 +41,46 @@ you can see at a glance which project is actively being worked on.
   for true push if lower latency is needed.
 - For very large trees the walk is bounded only by skip-dir pruning; a depth cap or
   caching layer could be added if scanning ever becomes slow.
+
+## Persist sort/filter settings (localStorage + reset control)
+
+The dashboard's search query, repo filter, tech-stack filter, and sort order now
+survive a page reload, and there's a one-click control to clear them back to
+defaults.
+
+### Frontend (`frontend/src/App.jsx`)
+- New `FILTER_STORAGE_KEY` and `DEFAULT_FILTERS` constants define the persisted
+  shape (`query`, `repoFilter`, `techFilter`, `sortBy`) and its defaults.
+- New `loadStoredFilters()` reads/validates the saved blob from `localStorage`:
+  - Each field is validated before use — `repoFilter`/`sortBy` must match a known
+    option (`REPO_FILTERS`/`SORT_OPTIONS`), strings are type-checked — so stale or
+    tampered storage can't put the UI in an invalid state.
+  - Wrapped in `try/catch`; falls back to `DEFAULT_FILTERS` if storage is
+    unavailable (private mode, quota) or the JSON is corrupt.
+- The four filter `useState` calls now lazily initialize from `loadStoredFilters()`,
+  so saved settings apply on first render with no flash of defaults.
+- A new `useEffect` writes the current settings to `localStorage` whenever any of
+  them change (also `try/catch`-guarded).
+- `resetFilters()` (memoized with `useCallback`) restores all four to defaults; the
+  persistence effect then clears the stored blob on the next tick.
+- `filtersAtDefault` drives a disabled state so the reset button is only active when
+  something is actually set.
+
+### Frontend (`frontend/src/styles.css`)
+- New `.filter-reset` button styled to match the existing pill `.filter-btn`s, with
+  `margin-left: auto` to right-align it, plus hover and `:disabled` (dimmed) states.
+
+### How to use
+1. Run backend and frontend as documented in `README.md`.
+2. On the dashboard, type a search, pick a Stack/Sort, or toggle a repo filter.
+3. Reload the page — your selections are restored automatically.
+4. Click **↺ Reset** (right side of the search bar) to clear everything back to
+   defaults; the button is greyed out when already at defaults.
+
+### Notes / remaining work
+- Build verification (`vite build`) could not be run in this sandbox; the change is
+  confined to existing hooks/constants and was reviewed by hand.
+- Settings are per-browser (localStorage), not synced across devices. A future
+  enhancement could also reflect filters in the URL hash for shareable views.
+- The activity-feed "Live" toggle is intentionally *not* persisted, to avoid a tab
+  silently polling forever after a reload; could be added if desired.

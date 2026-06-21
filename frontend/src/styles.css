@@ -179,6 +179,31 @@ body {
     white-space: nowrap;
 }
 
+.filter-reset {
+    background: rgba(20, 26, 49, 0.9);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-left: auto;
+    padding: 0.35rem 0.85rem;
+    transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+    white-space: nowrap;
+}
+
+.filter-reset:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.filter-reset:disabled {
+    cursor: default;
+    opacity: 0.4;
+}
+
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

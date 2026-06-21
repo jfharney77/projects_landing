@@ -66,6 +66,29 @@ function currentHashRoute() {
     return window.location.hash || '';
 }
 
+const FILTER_STORAGE_KEY = 'projects-landing:filters';
+const DEFAULT_FILTERS = { query: '', repoFilter: 'all', techFilter: 'all', sortBy: 'recent' };
+
+function loadStoredFilters() {
+    try {
+        const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_FILTERS };
+        const parsed = JSON.parse(raw);
+        return {
+            query: typeof parsed.query === 'string' ? parsed.query : DEFAULT_FILTERS.query,
+            repoFilter: REPO_FILTERS.some((f) => f.value === parsed.repoFilter)
+                ? parsed.repoFilter
+                : DEFAULT_FILTERS.repoFilter,
+            techFilter: typeof parsed.techFilter === 'string' ? parsed.techFilter : DEFAULT_FILTERS.techFilter,
+            sortBy: SORT_OPTIONS.some((o) => o.value === parsed.sortBy)
+                ? parsed.sortBy
+                : DEFAULT_FILTERS.sortBy,
+        };
+    } catch {
+        return { ...DEFAULT_FILTERS };
+    }
+}
+
 function RunCard({ run }) {
     return (
         <article className="project-card run-card">
@@ -409,6 +432,8 @@ function SearchBar({
     onSortBy,
     resultCount,
     totalCount,
+    onReset,
+    canReset,
 }) {
     return (
         <div className="search-bar">
@@ -469,6 +494,15 @@ function SearchBar({
                     {resultCount} / {totalCount} shown
                 </span>
             )}
+            <button
+                className="filter-reset"
+                type="button"
+                onClick={onReset}
+                disabled={!canReset}
+                title="Reset search, filters, and sort to defaults"
+            >
+                ↺ Reset
+            </button>
         </div>
     );
 }
@@ -487,10 +521,35 @@ function App() {
     const [activityError, setActivityError] = useState('');
     const [activityLive, setActivityLive] = useState(true);
     const [activityUpdated, setActivityUpdated] = useState(null);
-    const [query, setQuery] = useState('');
-    const [repoFilter, setRepoFilter] = useState('all');
-    const [techFilter, setTechFilter] = useState('all');
-    const [sortBy, setSortBy] = useState('recent');
+    const [query, setQuery] = useState(() => loadStoredFilters().query);
+    const [repoFilter, setRepoFilter] = useState(() => loadStoredFilters().repoFilter);
+    const [techFilter, setTechFilter] = useState(() => loadStoredFilters().techFilter);
+    const [sortBy, setSortBy] = useState(() => loadStoredFilters().sortBy);
+
+    const filtersAtDefault =
+        query === DEFAULT_FILTERS.query &&
+        repoFilter === DEFAULT_FILTERS.repoFilter &&
+        techFilter === DEFAULT_FILTERS.techFilter &&
+        sortBy === DEFAULT_FILTERS.sortBy;
+
+    const resetFilters = useCallback(() => {
+        setQuery(DEFAULT_FILTERS.query);
+        setRepoFilter(DEFAULT_FILTERS.repoFilter);
+        setTechFilter(DEFAULT_FILTERS.techFilter);
+        setSortBy(DEFAULT_FILTERS.sortBy);
+    }, []);
+
+    // Persist sort/filter/search settings so they survive reloads.
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(
+                FILTER_STORAGE_KEY,
+                JSON.stringify({ query, repoFilter, techFilter, sortBy }),
+            );
+        } catch {
+            // Storage may be unavailable (private mode / quota) — ignore.
+        }
+    }, [query, repoFilter, techFilter, sortBy]);
 
     useEffect(() => {
         const onHashChange = () => setRoute(currentHashRoute());
@@ -749,6 +808,8 @@ function App() {
                         onSortBy={setSortBy}
                         resultCount={filteredLeafCount}
                         totalCount={allLeaves.length}
+                        onReset={resetFilters}
+                        canReset={!filtersAtDefault}
                     />
                     <main className="top-list">
                         {filteredProjects.length === 0 && (
