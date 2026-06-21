@@ -127,3 +127,41 @@ projects at a glance.
   those commands require interactive approval in this environment; changes were
   reviewed by hand and are self-contained additions that don't alter existing
   fields or behavior.
+
+## [Integration] Project comparison view
+
+Compare two projects side by side to spot differences quickly — summaries, tech
+stack, git status, and activity metadata in a single aligned table.
+
+### What changed
+- New client-only `#compare` hash route with a `ComparePage` component
+  (`frontend/src/App.jsx`). No backend changes: it reuses the existing
+  `/api/projects` payload already loaded into `allLeaves`, so every field
+  (summary, `tech_tags`, `has_git_repo`/`git_host`, `last_modified_epoch`,
+  `disk_bytes`, `file_count`, `improvement_idea`) is available without new calls.
+- Two project pickers (A / B) with a ⇄ Swap button; each picker disables the
+  option already chosen in the other to prevent comparing a project with itself.
+- Aligned comparison table with a reusable `CompareRow` (label | A | B). Rows
+  that differ get a subtle accent-dot marker and a highlighted background via a
+  per-row `differs` predicate, so divergences are scannable at a glance.
+- Tech-stack row (`TechTagDiff`) renders each project's tags but highlights the
+  ones the *other* project lacks (`tech-tag--unique`, amber), and a footer line
+  lists the shared stack. "newer" / "larger" badges mark the winning side on the
+  Last-Modified and Disk-Size rows.
+- Two entry points: a "⚖ Compare Projects" button in the hero actions (opens the
+  picker empty) and a "⚖ Compare" button on every `ProjectCard` that deep-links
+  to `#compare/<encoded-path>` with that project preselected as A
+  (`compareHashFor` / `parseComparePreselect`).
+- Styling appended to `frontend/src/styles.css` reuses existing tokens
+  (`--accent`, `--accent-2`, `--card`, `--card-border`) and the existing
+  `tech-tags` / `tag` classes; the table collapses gracefully on narrow screens.
+
+### Notes / what remains
+- Comparison is limited to two projects; an N-way matrix was left out to keep the
+  layout readable. The picker pattern would extend to a third column if wanted.
+- Selections live in component state and reset on reload; only the A-side
+  preselect is encoded in the URL. Persisting both sides in the hash (e.g.
+  `#compare/a/b`) would make a comparison fully shareable.
+- Could not run `npm run build` here (interactive approval required in this
+  environment); changes were reviewed by hand and are additive — they reuse
+  existing helpers and don't alter existing routes, fields, or behavior.

@@ -8,6 +8,7 @@ const SORT_OPTIONS = [
 
 const RUNS_HASH = '#last-second-runs';
 const ACTIVITY_HASH = '#activity';
+const COMPARE_HASH = '#compare';
 const ACTIVITY_POLL_MS = 10000;
 
 const SERVICE_STATUS_LABELS = {
@@ -92,6 +93,23 @@ function compareProjects(a, b, sortBy, isGroupSort = false) {
 
 function currentHashRoute() {
     return window.location.hash || '';
+}
+
+// The compare route may carry a preselected project as `#compare/<encoded-path>`.
+function compareHashFor(projectPath) {
+    if (!projectPath) return COMPARE_HASH;
+    return `${COMPARE_HASH}/${encodeProjectPath(projectPath)}`;
+}
+
+function parseComparePreselect(route) {
+    if (!route.startsWith(`${COMPARE_HASH}/`)) return '';
+    const raw = route.slice(`${COMPARE_HASH}/`.length);
+    if (!raw) return '';
+    try {
+        return raw.split('/').map(decodeURIComponent).join('/');
+    } catch {
+        return '';
+    }
 }
 
 const FILTER_STORAGE_KEY = 'projects-landing:filters';
@@ -467,6 +485,14 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
                 )}
                 {hasBackend && <RunServiceButton project={project} service="backend" label="Backend" />}
                 {hasFrontend && <RunServiceButton project={project} service="frontend" label="Frontend" />}
+                <button
+                    className="action-btn"
+                    type="button"
+                    onClick={() => { window.location.hash = compareHashFor(project.path); }}
+                    title="Compare this project against another"
+                >
+                    ⚖ Compare
+                </button>
                 <button className="action-btn" type="button" onClick={copyPath}>Copy Path</button>
             </div>
         </article>
@@ -584,6 +610,236 @@ function SearchBar({
             >
                 ↺ Reset
             </button>
+        </div>
+    );
+}
+
+function ComparePicker({ label, value, onChange, options, excludePath }) {
+    return (
+        <label className="compare-picker">
+            <span className="compare-picker-label">{label}</span>
+            <select
+                className="stack-filter compare-select"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                aria-label={label}
+            >
+                <option value="">Select a project…</option>
+                {options.map((p) => (
+                    <option key={p.path} value={p.path} disabled={p.path === excludePath}>
+                        {p.name}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
+// One labelled metadata row rendered as three columns: label | A | B.
+function CompareRow({ label, a, b, render, differs }) {
+    const isDiff = typeof differs === 'function'
+        ? differs(a, b)
+        : JSON.stringify(a) !== JSON.stringify(b);
+    return (
+        <div className={`compare-row${isDiff ? ' compare-row--diff' : ''}`}>
+            <div className="compare-cell compare-cell--label">
+                {label}
+                {isDiff && <span className="compare-diff-dot" title="Values differ" aria-hidden="true" />}
+            </div>
+            <div className="compare-cell">{render(a)}</div>
+            <div className="compare-cell">{render(b)}</div>
+        </div>
+    );
+}
+
+// Render a project's tech tags, highlighting the ones the other project lacks.
+function TechTagDiff({ tags, otherTags }) {
+    const others = new Set(otherTags || []);
+    if (!tags || tags.length === 0) return <span className="compare-empty">None detected</span>;
+    return (
+        <div className="tech-tags">
+            {tags.map((tag) => (
+                <span
+                    className={`tech-tag${others.has(tag) ? '' : ' tech-tag--unique'}`}
+                    key={tag}
+                    title={others.has(tag) ? 'Shared' : 'Only in this project'}
+                >
+                    {tag}
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function ComparePage({ leaves, preselect, onBack }) {
+    const sorted = useMemo(
+        () => [...leaves].sort((a, b) => a.name.localeCompare(b.name)),
+        [leaves],
+    );
+
+    const [aPath, setAPath] = useState(() => preselect || '');
+    const [bPath, setBPath] = useState('');
+
+    // Adopt a freshly-supplied preselect (e.g. arriving from a card's Compare button).
+    useEffect(() => {
+        if (preselect) setAPath(preselect);
+    }, [preselect]);
+
+    const a = useMemo(() => sorted.find((p) => p.path === aPath) || null, [sorted, aPath]);
+    const b = useMemo(() => sorted.find((p) => p.path === bPath) || null, [sorted, bPath]);
+
+    const swap = useCallback(() => {
+        setAPath(bPath);
+        setBPath(aPath);
+    }, [aPath, bPath]);
+
+    const sharedTags = useMemo(() => {
+        if (!a || !b) return [];
+        const bset = new Set(b.tech_tags || []);
+        return (a.tech_tags || []).filter((t) => bset.has(t));
+    }, [a, b]);
+
+    const ready = a && b;
+
+    return (
+        <div className="runs-page compare-page">
+            <header className="hero">
+                <p className="eyebrow">Project Comparison</p>
+                <h1>Compare Projects</h1>
+                <p className="subtitle">
+                    Put two projects side by side to spot differences in summary, tech stack, and activity.
+                </p>
+                <div className="card-actions">
+                    <button className="action-btn" type="button" onClick={onBack}>Back To Projects</button>
+                </div>
+            </header>
+
+            <div className="compare-controls">
+                <ComparePicker
+                    label="Project A"
+                    value={aPath}
+                    onChange={setAPath}
+                    options={sorted}
+                    excludePath={bPath}
+                />
+                <button
+                    className="action-btn compare-swap"
+                    type="button"
+                    onClick={swap}
+                    disabled={!aPath && !bPath}
+                    title="Swap A and B"
+                >
+                    ⇄ Swap
+                </button>
+                <ComparePicker
+                    label="Project B"
+                    value={bPath}
+                    onChange={setBPath}
+                    options={sorted}
+                    excludePath={aPath}
+                />
+            </div>
+
+            {!ready && (
+                <p className="status">Select two projects to compare them side by side.</p>
+            )}
+
+            {ready && (
+                <main className="compare-table">
+                    <div className="compare-row compare-row--head">
+                        <div className="compare-cell compare-cell--label" />
+                        <div className="compare-cell compare-cell--name">{a.name}</div>
+                        <div className="compare-cell compare-cell--name">{b.name}</div>
+                    </div>
+
+                    <CompareRow
+                        label="Summary"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => x.summary !== y.summary}
+                        render={(p) => <p className="compare-summary">{p.summary}</p>}
+                    />
+                    <CompareRow
+                        label="Tech Stack"
+                        a={a}
+                        b={b}
+                        differs={(x, y) =>
+                            JSON.stringify([...(x.tech_tags || [])].sort())
+                            !== JSON.stringify([...(y.tech_tags || [])].sort())}
+                        render={(p) => (
+                            <TechTagDiff
+                                tags={p.tech_tags}
+                                otherTags={p === a ? b.tech_tags : a.tech_tags}
+                            />
+                        )}
+                    />
+                    <CompareRow
+                        label="Git Repo"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => x.has_git_repo !== y.has_git_repo || x.git_host !== y.git_host}
+                        render={(p) =>
+                            p.has_git_repo
+                                ? <span className="tag yes">{p.git_host || 'Git'}{p.git_host ? '' : ' Repo'}</span>
+                                : <span className="tag no">No Repo</span>}
+                    />
+                    <CompareRow
+                        label="Last Modified"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => x.last_modified_epoch !== y.last_modified_epoch}
+                        render={(p) => {
+                            const days = ageInDays(p.last_modified_epoch);
+                            const newer = a.last_modified_epoch !== b.last_modified_epoch
+                                && p.last_modified_epoch === Math.max(a.last_modified_epoch, b.last_modified_epoch);
+                            return (
+                                <span>
+                                    {days === null ? 'unknown' : formatRelativeAge(days * 86400)}
+                                    {newer && <span className="compare-badge" title="More recently updated"> · newer</span>}
+                                </span>
+                            );
+                        }}
+                    />
+                    <CompareRow
+                        label="Disk Size"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => Number(x.disk_bytes) !== Number(y.disk_bytes)}
+                        render={(p) => {
+                            const larger = Number(a.disk_bytes) !== Number(b.disk_bytes)
+                                && Number(p.disk_bytes) === Math.max(Number(a.disk_bytes), Number(b.disk_bytes));
+                            return (
+                                <span>
+                                    {formatBytes(p.disk_bytes)}
+                                    {larger && <span className="compare-badge" title="Larger footprint"> · larger</span>}
+                                </span>
+                            );
+                        }}
+                    />
+                    <CompareRow
+                        label="Files"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => Number(x.file_count) !== Number(y.file_count)}
+                        render={(p) => formatCount(p.file_count)}
+                    />
+                    <CompareRow
+                        label="Improvement Idea"
+                        a={a}
+                        b={b}
+                        differs={(x, y) => x.improvement_idea !== y.improvement_idea}
+                        render={(p) => (
+                            <p className="compare-summary">{p.improvement_idea || '—'}</p>
+                        )}
+                    />
+
+                    {sharedTags.length > 0 && (
+                        <p className="compare-shared-note">
+                            Shared stack: {sharedTags.join(', ')}
+                        </p>
+                    )}
+                </main>
+            )}
         </div>
     );
 }
@@ -808,6 +1064,21 @@ function App() {
         return { total, withGit };
     }, [allLeaves]);
 
+    if (route === COMPARE_HASH || route.startsWith(`${COMPARE_HASH}/`)) {
+        return (
+            <div className="page">
+                <ComparePage
+                    leaves={allLeaves}
+                    preselect={parseComparePreselect(route)}
+                    onBack={() => {
+                        window.location.hash = '';
+                        setRoute('');
+                    }}
+                />
+            </div>
+        );
+    }
+
     if (route === ACTIVITY_HASH) {
         return (
             <div className="page">
@@ -868,6 +1139,13 @@ function App() {
                         onClick={() => { window.location.hash = ACTIVITY_HASH; }}
                     >
                         ⚡ Activity Feed
+                    </button>
+                    <button
+                        className="action-btn"
+                        type="button"
+                        onClick={() => { window.location.hash = COMPARE_HASH; }}
+                    >
+                        ⚖ Compare Projects
                     </button>
                 </div>
             </header>
