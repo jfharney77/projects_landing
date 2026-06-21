@@ -565,3 +565,67 @@ showing *where* it matched.
   hand; the backend additions are self-contained (new model + two helpers + one
   endpoint) and the frontend changes are additive — they don't alter existing
   routes, fetches, fields, or the name/summary search path.
+
+## Custom Grouping Rules (user-defined project groups)
+
+Added a way to organise the dashboard by **your own** groups instead of being
+limited to top-level folders. Define rules like "AI Agents" (tech tag =
+LangGraph), "Web Apps" (name contains *app*), or "Mockups" (path under
+*mockups*); each project falls into the first enabled rule it matches, and
+anything left over is shown under **Ungrouped**.
+
+### Backend (`backend/main.py`)
+- New `GroupingRule` model (`id`, `name`, `match_type`, `value`, `enabled`,
+  `order`) plus `Create`/`Update`/`Reorder` request models.
+- Rules are persisted in `backend/grouping_rules.json` (atomic write-temp-then-
+  replace), shared across browsers like milestones. A missing/corrupt file
+  yields an empty ruleset rather than breaking.
+- Three match types, validated server-side: `tag` (tech tag, case-insensitive
+  exact), `name` (name substring), `path` (path equals or is under a value).
+- Full CRUD + priority control:
+  - `GET /api/grouping-rules` — list in priority order (lowest `order` first).
+  - `POST /api/grouping-rules` — add (appended at lowest priority).
+  - `PATCH /api/grouping-rules/{id}` — edit label / criterion / enabled / order.
+  - `DELETE /api/grouping-rules/{id}` — remove.
+  - `PUT /api/grouping-rules/reorder` — set priority from an ordered id list;
+    unknown ids are ignored and unmentioned rules keep their relative order.
+- New smoke test `backend/test_grouping_rules.py` (same dependency-free style as
+  `test_milestones.py`): covers create/list/update/delete, validation (bad match
+  type, empty name/value, missing ids → correct HTTP codes), and ordering +
+  reorder semantics.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- New **Group** control in the search bar (`Folder` ↔ `Custom`), persisted to
+  localStorage (`projects-landing:group-mode`).
+- New **⚙ Groups** button opening a manager modal (`GroupRulesModal`) to add,
+  enable/disable, reorder (▲/▼ = priority), and delete rules. Mutations call the
+  backend and update state optimistically where cheap.
+- `groupLeavesByRules()` buckets the already-filtered leaf list by the rules in
+  priority order, sorts each bucket with the active sort, drops empty groups, and
+  appends an **Ungrouped** catch-all. Reuses the existing `ProjectGroup`
+  collapsible section component for rendering.
+- Custom grouping composes with the existing search / repo / stack filters and
+  sort order — it only changes *how leaves are bucketed*, not which leaves show.
+- Graceful fallbacks: if Custom is selected with no rules defined, the folder
+  view is shown with an inline hint linking to the manager; if rules can't load,
+  folder grouping still works.
+
+### How to use
+1. Run backend + frontend as in `README.md`.
+2. Click **⚙ Groups**, add a rule (e.g. name *AI Agents*, match *Tech tag*,
+   value *LangGraph*), and close.
+3. Set the **Group** dropdown to **Custom** — projects re-bucket into your groups
+   with anything unmatched under **Ungrouped**. Reorder rules to change which one
+   wins when a project matches several.
+
+### Notes / remaining work
+- Grouping is applied client-side (the frontend already holds every leaf); the
+  backend only persists the ruleset. The export-snapshot feature still groups by
+  folder — wiring custom groups into the snapshot would be a natural follow-up.
+- Only AND-free single-criterion rules are supported. Compound rules (tag AND
+  name) or regex matching could be added later via the same model.
+- Could not run `test_grouping_rules.py` or `npm run build` here (command
+  execution requires interactive approval in this environment). The code was
+  reviewed by hand; backend changes are self-contained and additive, and the
+  frontend changes don't alter existing routes, fetches, or the folder-grouping
+  path (custom rendering is gated behind `groupMode === 'custom'`).

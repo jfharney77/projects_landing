@@ -1446,6 +1446,174 @@ def delete_milestone(milestone_id: str) -> dict[str, str]:
     return {"status": "deleted", "id": milestone_id}
 
 
+# ── Custom grouping rules: user-defined project groupings ────────────────────
+# By default the dashboard groups projects only by their top-level folder. These
+# rules let a user define their own buckets (e.g. "AI Agents", "Web Apps") that
+# cut across folders. Each rule matches leaf projects by tech tag, name substring,
+# or path, and rules are applied in priority order (lowest `order` wins) so a
+# project lands in the first rule it matches. The grouping itself is applied in
+# the frontend (it already holds every leaf project); the backend just persists
+# the ruleset so it's shared across browsers, like milestones.
+GROUPING_RULES_FILE = Path(__file__).resolve().parent / "grouping_rules.json"
+GROUP_NAME_MAX = 80
+GROUP_VALUE_MAX = 200
+GROUPING_MATCH_TYPES = {"tag", "name", "path"}
+
+
+class GroupingRule(BaseModel):
+    id: str
+    name: str                  # the group label matched projects are bucketed under
+    match_type: str            # 'tag' | 'name' | 'path'
+    value: str                 # criterion: tag name, name substring, or path
+    enabled: bool = True
+    order: int = 0             # priority; lower numbers are evaluated first
+
+
+class CreateGroupingRuleRequest(BaseModel):
+    name: str
+    match_type: str
+    value: str
+    enabled: bool = True
+
+
+class UpdateGroupingRuleRequest(BaseModel):
+    # All optional — only provided fields are changed.
+    name: str | None = None
+    match_type: str | None = None
+    value: str | None = None
+    enabled: bool | None = None
+    order: int | None = None
+
+
+class ReorderGroupingRulesRequest(BaseModel):
+    order: list[str] = []      # rule ids in the desired priority order
+
+
+def load_grouping_rules() -> list[dict]:
+    """Read all grouping rules from disk; a missing/corrupt file yields []."""
+    if not GROUPING_RULES_FILE.exists():
+        return []
+    try:
+        raw = json.loads(GROUPING_RULES_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return raw if isinstance(raw, list) else []
+
+
+def save_grouping_rules(rules: list[dict]) -> None:
+    """Atomically persist grouping rules (write-temp-then-replace)."""
+    tmp = GROUPING_RULES_FILE.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(rules, indent=2), encoding="utf-8")
+        tmp.replace(GROUPING_RULES_FILE)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to persist grouping rules: {exc}")
+
+
+def _validate_match_type(match_type: str) -> str:
+    match_type = (match_type or "").strip().lower()
+    if match_type not in GROUPING_MATCH_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"match_type must be one of: {', '.join(sorted(GROUPING_MATCH_TYPES))}.",
+        )
+    return match_type
+
+
+def _clean_group_name(name: str) -> str:
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name cannot be empty.")
+    return name[:GROUP_NAME_MAX].rstrip()
+
+
+def _clean_group_value(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="Match value cannot be empty.")
+    return value[:GROUP_VALUE_MAX].rstrip()
+
+
+def _sorted_rules(rules: list[dict]) -> list[dict]:
+    """Order rules by priority (order asc), breaking ties on group name."""
+    return sorted(rules, key=lambda r: (r.get("order", 0), str(r.get("name", "")).lower()))
+
+
+@app.get("/api/grouping-rules", response_model=list[GroupingRule])
+def list_grouping_rules() -> list[GroupingRule]:
+    """Return all custom grouping rules in priority order (lowest order first)."""
+    return [GroupingRule(**r) for r in _sorted_rules(load_grouping_rules())]
+
+
+@app.post("/api/grouping-rules", response_model=GroupingRule)
+def create_grouping_rule(req: CreateGroupingRuleRequest) -> GroupingRule:
+    """Add a custom grouping rule; it's appended at the lowest priority."""
+    rules = load_grouping_rules()
+    next_order = (max((r.get("order", 0) for r in rules), default=-1) + 1)
+    rule = GroupingRule(
+        id=uuid.uuid4().hex,
+        name=_clean_group_name(req.name),
+        match_type=_validate_match_type(req.match_type),
+        value=_clean_group_value(req.value),
+        enabled=bool(req.enabled),
+        order=next_order,
+    )
+    rules.append(rule.model_dump())
+    save_grouping_rules(rules)
+    return rule
+
+
+@app.patch("/api/grouping-rules/{rule_id}", response_model=GroupingRule)
+def update_grouping_rule(rule_id: str, req: UpdateGroupingRuleRequest) -> GroupingRule:
+    """Edit a grouping rule's label, criterion, enabled state, or priority."""
+    rules = load_grouping_rules()
+    for r in rules:
+        if r.get("id") != rule_id:
+            continue
+        if req.name is not None:
+            r["name"] = _clean_group_name(req.name)
+        if req.match_type is not None:
+            r["match_type"] = _validate_match_type(req.match_type)
+        if req.value is not None:
+            r["value"] = _clean_group_value(req.value)
+        if req.enabled is not None:
+            r["enabled"] = bool(req.enabled)
+        if req.order is not None:
+            r["order"] = int(req.order)
+        save_grouping_rules(rules)
+        return GroupingRule(**r)
+    raise HTTPException(status_code=404, detail="Grouping rule not found")
+
+
+@app.delete("/api/grouping-rules/{rule_id}")
+def delete_grouping_rule(rule_id: str) -> dict[str, str]:
+    """Remove a grouping rule."""
+    rules = load_grouping_rules()
+    remaining = [r for r in rules if r.get("id") != rule_id]
+    if len(remaining) == len(rules):
+        raise HTTPException(status_code=404, detail="Grouping rule not found")
+    save_grouping_rules(remaining)
+    return {"status": "deleted", "id": rule_id}
+
+
+@app.put("/api/grouping-rules/reorder", response_model=list[GroupingRule])
+def reorder_grouping_rules(req: ReorderGroupingRulesRequest) -> list[GroupingRule]:
+    """Set rule priority from an ordered list of ids.
+
+    Ids in the request are assigned increasing `order` values in the order given;
+    any rules not mentioned keep their relative order and are appended after.
+    Unknown ids are ignored so a stale client can't corrupt the store.
+    """
+    rules = load_grouping_rules()
+    by_id = {r.get("id"): r for r in rules}
+    ranked = [by_id[rid] for rid in req.order if rid in by_id]
+    leftover = [r for r in _sorted_rules(rules) if r.get("id") not in set(req.order)]
+    for i, rule in enumerate([*ranked, *leftover]):
+        rule["order"] = i
+    save_grouping_rules(rules)
+    return [GroupingRule(**r) for r in _sorted_rules(rules)]
+
+
 def build_project(project_dir: Path) -> ProjectSummary:
     has_git = has_own_git_repo(project_dir)
     git_remote_url = detect_git_remote_url(project_dir) if has_git else ""

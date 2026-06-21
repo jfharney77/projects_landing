@@ -1202,6 +1202,229 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
     );
 }
 
+// ── Custom grouping rules ────────────────────────────────────────────────────
+// Beyond the folder-based grouping, users can define rules that bucket leaf
+// projects into their own named groups (e.g. "AI Agents", "Web Apps"). Rules are
+// persisted server-side (shared across browsers) and applied here, in priority
+// order, against the already-filtered leaf list. Each project lands in the first
+// enabled rule it matches; anything unmatched falls into "Ungrouped".
+const GROUP_MODE_STORAGE_KEY = 'projects-landing:group-mode';
+const UNGROUPED_LABEL = 'Ungrouped';
+
+const MATCH_TYPE_OPTIONS = [
+    { value: 'tag', label: 'Tech tag', placeholder: 'e.g. React' },
+    { value: 'name', label: 'Name contains', placeholder: 'e.g. agent' },
+    { value: 'path', label: 'Path is / under', placeholder: 'e.g. mockups' },
+];
+
+function matchTypeLabel(type) {
+    return (MATCH_TYPE_OPTIONS.find((o) => o.value === type) || {}).label || type;
+}
+
+// Does a single leaf project satisfy one grouping rule?
+function leafMatchesRule(leaf, rule) {
+    const value = (rule.value || '').trim().toLowerCase();
+    if (!value) return false;
+    if (rule.match_type === 'tag') {
+        return (leaf.tech_tags || []).some((t) => t.toLowerCase() === value);
+    }
+    if (rule.match_type === 'name') {
+        return leaf.name.toLowerCase().includes(value);
+    }
+    if (rule.match_type === 'path') {
+        const path = (leaf.path || '').toLowerCase();
+        return path === value || path.startsWith(`${value}/`);
+    }
+    return false;
+}
+
+// Bucket leaves into rule-defined groups (priority order), with an "Ungrouped"
+// catch-all appended last. Empty groups are dropped. Children within each group
+// are sorted with the active sort; groups themselves keep their rule priority,
+// with Ungrouped always last. Returns ProjectGroup-shaped objects.
+function groupLeavesByRules(leaves, rules, sortBy) {
+    const active = rules.filter((r) => r.enabled !== false);
+    const buckets = new Map();        // rule.id -> { name, children }
+    for (const rule of active) {
+        if (!buckets.has(rule.name)) buckets.set(rule.name, { name: rule.name, children: [] });
+    }
+    const ungrouped = [];
+
+    for (const leaf of leaves) {
+        const rule = active.find((r) => leafMatchesRule(leaf, r));
+        if (rule) buckets.get(rule.name).children.push(leaf);
+        else ungrouped.push(leaf);
+    }
+
+    const groups = [];
+    // Preserve rule priority order, de-duplicating groups that share a name.
+    const seen = new Set();
+    for (const rule of active) {
+        if (seen.has(rule.name)) continue;
+        seen.add(rule.name);
+        const bucket = buckets.get(rule.name);
+        if (bucket && bucket.children.length > 0) {
+            groups.push({
+                ...bucket,
+                children: [...bucket.children].sort((a, b) => compareProjects(a, b, sortBy)),
+            });
+        }
+    }
+    if (ungrouped.length > 0) {
+        groups.push({
+            name: UNGROUPED_LABEL,
+            children: [...ungrouped].sort((a, b) => compareProjects(a, b, sortBy)),
+        });
+    }
+    return groups;
+}
+
+function GroupRuleEditor({ rules, busy, error, onAdd, onUpdate, onDelete, onMove }) {
+    const [name, setName] = useState('');
+    const [matchType, setMatchType] = useState('tag');
+    const [value, setValue] = useState('');
+
+    const placeholder = (MATCH_TYPE_OPTIONS.find((o) => o.value === matchType) || {}).placeholder || '';
+
+    const submit = (e) => {
+        e.preventDefault();
+        if (!name.trim() || !value.trim() || busy) return;
+        onAdd({ name: name.trim(), match_type: matchType, value: value.trim() });
+        setName('');
+        setValue('');
+    };
+
+    return (
+        <div className="group-rules">
+            <ul className="group-rules-list">
+                {rules.length === 0 && (
+                    <li className="group-rules-empty">
+                        No grouping rules yet. Add one below — projects matching it are bucketed
+                        together; anything left over shows as “{UNGROUPED_LABEL}”.
+                    </li>
+                )}
+                {rules.map((rule, i) => (
+                    <li key={rule.id} className={`group-rule-item${rule.enabled === false ? ' group-rule-item--off' : ''}`}>
+                        <span className="group-rule-order">
+                            <button
+                                className="group-rule-move"
+                                type="button"
+                                onClick={() => onMove(i, -1)}
+                                disabled={i === 0 || busy}
+                                title="Higher priority"
+                                aria-label={`Move "${rule.name}" up`}
+                            >▲</button>
+                            <button
+                                className="group-rule-move"
+                                type="button"
+                                onClick={() => onMove(i, 1)}
+                                disabled={i === rules.length - 1 || busy}
+                                title="Lower priority"
+                                aria-label={`Move "${rule.name}" down`}
+                            >▼</button>
+                        </span>
+                        <span className="group-rule-name">{rule.name}</span>
+                        <span className="group-rule-crit">
+                            {matchTypeLabel(rule.match_type)}: <code>{rule.value}</code>
+                        </span>
+                        <label className="group-rule-toggle" title="Enable / disable this rule">
+                            <input
+                                type="checkbox"
+                                checked={rule.enabled !== false}
+                                onChange={() => onUpdate(rule.id, { enabled: !(rule.enabled !== false) })}
+                                disabled={busy}
+                                aria-label={`Enable rule "${rule.name}"`}
+                            />
+                        </label>
+                        <button
+                            className="group-rule-delete"
+                            type="button"
+                            onClick={() => onDelete(rule.id)}
+                            disabled={busy}
+                            title="Delete rule"
+                            aria-label={`Delete rule "${rule.name}"`}
+                        >✕</button>
+                    </li>
+                ))}
+            </ul>
+            <form className="group-rule-add" onSubmit={submit}>
+                <input
+                    className="group-rule-input"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value.slice(0, 80))}
+                    placeholder="Group name (e.g. AI Agents)"
+                    aria-label="New group name"
+                />
+                <select
+                    className="stack-filter group-rule-type"
+                    value={matchType}
+                    onChange={(e) => setMatchType(e.target.value)}
+                    aria-label="Match type"
+                >
+                    {MATCH_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                </select>
+                <input
+                    className="group-rule-input"
+                    type="text"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value.slice(0, 200))}
+                    placeholder={placeholder}
+                    aria-label="Match value"
+                />
+                <button className="action-btn" type="submit" disabled={busy || !name.trim() || !value.trim()}>
+                    Add Rule
+                </button>
+            </form>
+            {error && <p className="group-rules-error">{error}</p>}
+        </div>
+    );
+}
+
+function GroupRulesModal({ rules, busy, error, onAdd, onUpdate, onDelete, onMove, onClose }) {
+    useEffect(() => {
+        function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+        }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    return (
+        <div className="palette-backdrop" onClick={onClose} role="presentation">
+            <div
+                className="palette group-rules-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Manage custom grouping rules"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="palette-head">
+                    <h2>Custom Grouping Rules</h2>
+                    <button className="palette-close" type="button" onClick={onClose} aria-label="Close">✕</button>
+                </div>
+                <p className="group-rules-intro">
+                    Define your own project groups that cut across top-level folders. Each project
+                    joins the first enabled rule it matches (top to bottom). Use the arrows to set
+                    priority. Switch the dashboard’s <strong>Group</strong> control to “Custom” to
+                    see them applied.
+                </p>
+                <GroupRuleEditor
+                    rules={rules}
+                    busy={busy}
+                    error={error}
+                    onAdd={onAdd}
+                    onUpdate={onUpdate}
+                    onDelete={onDelete}
+                    onMove={onMove}
+                />
+            </div>
+        </div>
+    );
+}
+
 function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0, readmeMatches = {}, query = '' }) {
     const [open, setOpen] = useState(true);
     return (
@@ -1240,6 +1463,9 @@ function SearchBar({
     techOptions,
     sortBy,
     onSortBy,
+    groupMode,
+    onGroupMode,
+    onManageGroups,
     resultCount,
     totalCount,
     onReset,
@@ -1310,6 +1536,26 @@ function SearchBar({
                     ))}
                 </select>
             </label>
+            <label className="stack-filter-wrap group-mode-wrap">
+                <span className="stack-filter-label">Group</span>
+                <select
+                    className="stack-filter"
+                    value={groupMode}
+                    onChange={(e) => onGroupMode(e.target.value)}
+                    aria-label="Group projects"
+                >
+                    <option value="folder">Folder</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+            <button
+                className="filter-btn group-manage-btn"
+                type="button"
+                onClick={onManageGroups}
+                title="Define custom grouping rules"
+            >
+                ⚙ Groups
+            </button>
             {(query || repoFilter !== 'all' || techFilter !== 'all') && (
                 <span className="search-results-count">
                     {resultCount} / {totalCount} shown
@@ -1578,6 +1824,18 @@ function App() {
     const [sortBy, setSortBy] = useState(() => loadStoredFilters().sortBy);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    // Custom grouping: rules are server-backed; the active mode is local-only.
+    const [groupMode, setGroupMode] = useState(() => {
+        try {
+            return window.localStorage.getItem(GROUP_MODE_STORAGE_KEY) === 'custom' ? 'custom' : 'folder';
+        } catch {
+            return 'folder';
+        }
+    });
+    const [groupRules, setGroupRules] = useState([]);
+    const [groupRulesOpen, setGroupRulesOpen] = useState(false);
+    const [groupBusy, setGroupBusy] = useState(false);
+    const [groupError, setGroupError] = useState('');
     // README content-search results, keyed by project path: { snippet, match_count }.
     const [readmeMatches, setReadmeMatches] = useState({});
     const searchRef = useRef(null);
@@ -1606,6 +1864,111 @@ function App() {
             // Storage may be unavailable (private mode / quota) — ignore.
         }
     }, [query, repoFilter, techFilter, sortBy]);
+
+    // Persist the active grouping mode (folder vs. custom) across reloads.
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(GROUP_MODE_STORAGE_KEY, groupMode);
+        } catch {
+            // Storage may be unavailable — ignore.
+        }
+    }, [groupMode]);
+
+    // Load the persisted custom grouping rules once on mount.
+    const reloadGroupRules = useCallback(async (signal) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/grouping-rules`, signal ? { signal } : undefined);
+            if (!res.ok) return;
+            setGroupRules(await res.json());
+        } catch {
+            // Non-critical — folder grouping still works if rules can't load.
+        }
+    }, []);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        reloadGroupRules(controller.signal);
+        return () => controller.abort();
+    }, [reloadGroupRules]);
+
+    // ── Grouping-rule mutations (optimistic where cheap, else reload) ──────────
+    const addGroupRule = useCallback(async (payload) => {
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const res = await fetch(`${API_BASE}/api/grouping-rules`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const created = await res.json();
+            setGroupRules((prev) => [...prev, created]);
+        } catch {
+            setGroupError('Could not add rule');
+        } finally {
+            setGroupBusy(false);
+        }
+    }, []);
+
+    const updateGroupRule = useCallback(async (id, patch) => {
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const res = await fetch(`${API_BASE}/api/grouping-rules/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patch),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const updated = await res.json();
+            setGroupRules((prev) => prev.map((r) => (r.id === id ? updated : r)));
+        } catch {
+            setGroupError('Could not update rule');
+        } finally {
+            setGroupBusy(false);
+        }
+    }, []);
+
+    const deleteGroupRule = useCallback(async (id) => {
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const res = await fetch(`${API_BASE}/api/grouping-rules/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            setGroupRules((prev) => prev.filter((r) => r.id !== id));
+        } catch {
+            setGroupError('Could not delete rule');
+        } finally {
+            setGroupBusy(false);
+        }
+    }, []);
+
+    // Move a rule up (delta -1) or down (delta +1) in priority, then persist the
+    // new order to the backend and adopt its canonical ordering on success.
+    const moveGroupRule = useCallback(async (index, delta) => {
+        const target = index + delta;
+        if (target < 0 || target >= groupRules.length) return;
+        const next = [...groupRules];
+        [next[index], next[target]] = [next[target], next[index]];
+        setGroupRules(next);
+        setGroupBusy(true);
+        setGroupError('');
+        try {
+            const res = await fetch(`${API_BASE}/api/grouping-rules/reorder`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order: next.map((r) => r.id) }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            setGroupRules(await res.json());
+        } catch {
+            setGroupError('Could not reorder rules');
+            await reloadGroupRules();
+        } finally {
+            setGroupBusy(false);
+        }
+    }, [groupRules, reloadGroupRules]);
 
     // Search inside README content (backend) and merge the results into the
     // client-side filter. Debounced so each keystroke doesn't hit the API; an
@@ -1809,9 +2172,19 @@ function App() {
         return matched.sort((a, b) => compareProjects(a, b, sortBy, true));
     }, [projects, query, repoFilter, techFilter, sortBy, readmeMatches]);
 
-    const filteredLeafCount = useMemo(() =>
-        filteredProjects.flatMap((p) => p.children && p.children.length > 0 ? p.children : [p]).length,
+    const filteredLeaves = useMemo(() =>
+        filteredProjects.flatMap((p) => p.children && p.children.length > 0 ? p.children : [p]),
         [filteredProjects]);
+
+    const filteredLeafCount = filteredLeaves.length;
+
+    // In custom mode, re-bucket the filtered leaves by the user's rules instead
+    // of by folder. Falls back to folder grouping when no rules are defined.
+    const customGroups = useMemo(
+        () => groupLeavesByRules(filteredLeaves, groupRules, sortBy),
+        [filteredLeaves, groupRules, sortBy],
+    );
+    const useCustomGrouping = groupMode === 'custom' && groupRules.length > 0;
 
     const stats = useMemo(() => {
         const total = allLeaves.length;
@@ -2008,23 +2381,57 @@ function App() {
                         techOptions={techOptions}
                         sortBy={sortBy}
                         onSortBy={setSortBy}
+                        groupMode={groupMode}
+                        onGroupMode={setGroupMode}
+                        onManageGroups={() => setGroupRulesOpen(true)}
                         resultCount={filteredLeafCount}
                         totalCount={allLeaves.length}
                         onReset={resetFilters}
                         canReset={!filtersAtDefault}
                         searchRef={searchRef}
                     />
+                    {groupMode === 'custom' && groupRules.length === 0 && (
+                        <p className="group-hint">
+                            No grouping rules defined yet — showing the folder view. Click
+                            {' '}<button className="link-btn" type="button" onClick={() => setGroupRulesOpen(true)}>⚙ Groups</button>{' '}
+                            to create custom groups.
+                        </p>
+                    )}
                     <main className="top-list">
                         {filteredProjects.length === 0 && (
                             <p className="status">No projects match your search.</p>
                         )}
-                        {filteredProjects.map((project, i) =>
-                            project.children && project.children.length > 0
-                                ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} baseIndex={i} readmeMatches={readmeMatches} query={query} />
-                                : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} readmeMatch={readmeMatches[project.path]} query={query} />
-                        )}
+                        {useCustomGrouping
+                            ? customGroups.map((group, gi) => (
+                                <ProjectGroup
+                                    key={group.name}
+                                    project={group}
+                                    onOpenRuns={() => { window.location.hash = RUNS_HASH; }}
+                                    healthMap={healthMap}
+                                    baseIndex={gi}
+                                    readmeMatches={readmeMatches}
+                                    query={query}
+                                />
+                            ))
+                            : filteredProjects.map((project, i) =>
+                                project.children && project.children.length > 0
+                                    ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} baseIndex={i} readmeMatches={readmeMatches} query={query} />
+                                    : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} readmeMatch={readmeMatches[project.path]} query={query} />
+                            )}
                     </main>
                 </>
+            )}
+            {groupRulesOpen && (
+                <GroupRulesModal
+                    rules={groupRules}
+                    busy={groupBusy}
+                    error={groupError}
+                    onAdd={addGroupRule}
+                    onUpdate={updateGroupRule}
+                    onDelete={deleteGroupRule}
+                    onMove={moveGroupRule}
+                    onClose={() => setGroupRulesOpen(false)}
+                />
             )}
             {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             {exportOpen && (

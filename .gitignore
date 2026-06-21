@@ -16,3 +16,7 @@ dist/
 # Milestone tracker data (per-project goals, written at runtime)
 backend/milestones.json
 backend/milestones.json.tmp
+
+# Custom grouping rules (user-defined project groups, written at runtime)
+backend/grouping_rules.json
+backend/grouping_rules.json.tmp
