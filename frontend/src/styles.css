@@ -1742,3 +1742,113 @@ h1 {
     color: var(--danger);
     font-size: 0.82rem;
 }
+
+/* ── Keyboard shortcut footer ───────────────────────────────────────────── */
+.shortcut-footer {
+    margin-top: 2.5rem;
+    padding: 0.8rem 1rem;
+    background: rgba(12, 16, 31, 0.55);
+    border: 1px solid rgba(48, 58, 103, 0.55);
+    border-radius: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+}
+
+.shortcut-footer-label {
+    flex: none;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-right: 0.4rem;
+    border-right: 1px solid rgba(48, 58, 103, 0.8);
+    align-self: center;
+    white-space: nowrap;
+}
+
+.shortcut-footer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.shortcut-footer-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+}
+
+.shortcut-footer-keys {
+    display: flex;
+    gap: 0.2rem;
+}
+
+.shortcut-footer-key {
+    min-width: 1.35rem;
+    text-align: center;
+    padding: 0.08rem 0.35rem;
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+    font-size: 0.72rem;
+    color: var(--text);
+    background: var(--bg-soft);
+    border: 1px solid var(--card-border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    line-height: 1.4;
+}
+
+.shortcut-footer-desc {
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+
+.shortcut-footer-more {
+    flex: none;
+    background: transparent;
+    border: 1px solid rgba(48, 58, 103, 0.7);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 0.25rem 0.7rem;
+    text-transform: uppercase;
+    transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.shortcut-footer-more:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+@media (max-width: 640px) {
+    .shortcut-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+    }
+
+    .shortcut-footer-label {
+        border-right: none;
+        padding-right: 0;
+        border-bottom: 1px solid rgba(48, 58, 103, 0.8);
+        padding-bottom: 0.4rem;
+        width: 100%;
+    }
+
+    .shortcut-footer-more {
+        margin-left: 0;
+    }
+}

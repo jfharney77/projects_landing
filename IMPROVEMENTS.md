@@ -677,3 +677,33 @@ summary: "N shared tags · M projects".
 - Could not run `npm run build` here (interactive approval required in this
   environment); changes were reviewed by hand and are purely additive — no
   existing routes, fetches, or components were modified.
+
+## [Docs] Dashboard keyboard help card
+
+A compact shortcut reference card rendered in the footer of the main landing
+page, so the available keyboard shortcuts are discoverable without opening the
+full help overlay.
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+- New `ShortcutFooter` component: a `<footer>` bar that lists every entry from
+  the existing `SHORTCUTS` constant as a row of `<kbd>`-styled key chips with
+  their descriptions. A "? full help" button at the right edge opens the
+  existing `ShortcutPalette` modal for the complete overlay.
+- Rendered as the last child of the main dashboard `<div className="page">`,
+  after the project list and all modals — so it's always visible at the bottom
+  of the dashboard.
+- CSS (`.shortcut-footer*` block in `styles.css`): subtle dark panel matching
+  the existing card palette; key chips reuse the same sizing/border-bottom trick
+  as `.palette-key`; text sizes are slightly smaller (0.72 rem) to keep the
+  bar compact. Wraps gracefully on narrow viewports and stacks vertically on
+  mobile (≤ 640 px).
+
+### Scope / notes
+- Reuses `SHORTCUTS` — a single source of truth already powering the overlay
+  and the keydown handler. Adding a new shortcut automatically appears in both
+  the footer card and the full help modal.
+- The footer is intentionally shown only on the main dashboard route (it lives
+  inside the final `return` of `App`, not the compare/activity/runs branches).
+- Could not run `npm run build` here (interactive approval required); changes
+  were reviewed by hand — purely additive, no existing components modified.

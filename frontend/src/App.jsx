@@ -517,6 +517,34 @@ function ExportSnapshotModal({ snapshot, onClose }) {
     );
 }
 
+function ShortcutFooter({ onOpenPalette }) {
+    return (
+        <footer className="shortcut-footer">
+            <span className="shortcut-footer-label">Keyboard shortcuts</span>
+            <ul className="shortcut-footer-list" aria-label="Keyboard shortcuts quick reference">
+                {SHORTCUTS.map((s) => (
+                    <li className="shortcut-footer-item" key={s.label}>
+                        <span className="shortcut-footer-keys">
+                            {s.keys.map((k) => (
+                                <kbd className="shortcut-footer-key" key={k}>{k}</kbd>
+                            ))}
+                        </span>
+                        <span className="shortcut-footer-desc">{s.label}</span>
+                    </li>
+                ))}
+            </ul>
+            <button
+                className="shortcut-footer-more"
+                type="button"
+                onClick={onOpenPalette}
+                title="Show keyboard shortcuts overlay"
+            >
+                ? full help
+            </button>
+        </footer>
+    );
+}
+
 function ShortcutPalette({ onClose }) {
     // Close on Escape regardless of focus while the overlay is mounted.
     useEffect(() => {
@@ -2513,6 +2541,7 @@ function App() {
                 />
             )}
             {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
+            <ShortcutFooter onOpenPalette={() => setPaletteOpen(true)} />
             {exportOpen && (
                 <ExportSnapshotModal
                     snapshot={buildSnapshot({
