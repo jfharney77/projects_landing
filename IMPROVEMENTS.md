@@ -242,3 +242,47 @@ shortcuts so power users can drive the dashboard without the mouse.
   environment); changes were reviewed by hand and are purely additive — they add
   one component, one constant, one ref/state pair, and a keydown effect without
   altering existing routes, fetches, or behavior.
+
+## [Integration] Export dashboard snapshot
+
+A one-click way to generate a shareable report of the dashboard's *current*
+state — exactly what the user is looking at, after search/filter/sort — as either
+human-readable Markdown (for pasting into a doc/ticket) or JSON (for tooling).
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+- New pure helpers:
+  - `buildSnapshot(...)` assembles a structured snapshot from the live dashboard
+    state: a timestamp, the overview stats (total / with-git / shown-after-filter),
+    a human-readable description of the active filters, and one row per **filtered,
+    sorted** leaf project. Grouped projects (e.g. `mockups`, `tutorials`) are
+    flattened with their group name preserved.
+  - Each project row is enriched beyond the API payload: its **health issues**
+    (from the existing `healthMap`) and its locally-stored **note** (read via the
+    existing `loadStoredNotes()`), so the snapshot reflects everything visible on a
+    card, not just the raw `/api/projects` fields.
+  - `snapshotToMarkdown()` renders a readable report (overview, active filters,
+    then `###` group / `####` project headings with summary, stack, git, updated,
+    size, health, improvement, and note). `snapshotToJson()` is pretty-printed JSON.
+  - `downloadTextFile()` triggers a client-side download via a `Blob` + object URL.
+- New `ExportSnapshotModal` component: a dialog (reusing the existing
+  `.palette-backdrop` / `.palette` chrome) with a Markdown/JSON toggle, a live
+  read-only preview, a **Copy** button (clipboard), and a **Download** button that
+  saves `dashboard-snapshot-<timestamp>.md|json`. Closes on backdrop click, ✕, or
+  `Esc`.
+- Wiring in `App`: a new `exportOpen` state, an `⤓ Export Snapshot` button in the
+  hero actions, a new `e` keyboard shortcut (added to `SHORTCUTS` and the keydown
+  switch), and conditional rendering of the modal on the main dashboard route.
+
+### Scope / notes
+- Snapshot is generated entirely client-side from data already in memory — no new
+  backend endpoint, no extra network calls. It honors the current filters/sort so
+  the export matches what's on screen; clearing filters first exports everything.
+- The modal renders only on the main dashboard route (where `filteredProjects`
+  exists); the `e` shortcut is likewise scoped to that route, consistent with the
+  other action shortcuts.
+- Could not run `npm run build` / `esbuild` here (interactive approval required in
+  this environment). Changes were reviewed by hand and are additive: new pure
+  helper functions, one modal component, one state pair, one hero button, one
+  shortcut, and a CSS block — no existing routes, fetches, or components changed.
+

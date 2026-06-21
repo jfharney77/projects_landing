@@ -120,10 +120,239 @@ const SHORTCUTS = [
     { keys: ['s'], label: 'Cycle sort order' },
     { keys: ['a'], label: 'Open the activity feed' },
     { keys: ['c'], label: 'Open project comparison' },
+    { keys: ['e'], label: 'Export a dashboard snapshot' },
     { keys: ['o'], label: 'Open the top project (app, repo, or README)' },
     { keys: ['r'], label: 'Reset search, filters, and sort' },
     { keys: ['Esc'], label: 'Close this help / blur the search box' },
 ];
+
+// ── Dashboard snapshot export ────────────────────────────────────────────────
+// Builds a shareable, self-contained report of what the dashboard is currently
+// showing (stats + active filters + the filtered/sorted project list, enriched
+// with each project's health issues and locally-stored note). Two formats are
+// offered: human-readable Markdown for pasting into docs/tickets, and JSON for
+// machine consumption.
+
+function describeFilters({ query, repoFilter, techFilter, sortBy }) {
+    const repoLabel = (REPO_FILTERS.find((f) => f.value === repoFilter) || {}).label || repoFilter;
+    const sortLabel = (SORT_OPTIONS.find((o) => o.value === sortBy) || {}).label || sortBy;
+    return {
+        search: query.trim() || null,
+        repo: repoLabel,
+        stack: techFilter === 'all' ? 'All' : techFilter,
+        sort: sortLabel,
+    };
+}
+
+// Flatten one (possibly grouped) filtered project into report-ready leaf rows,
+// attaching the group name, health issues, and any locally-stored note.
+function snapshotLeaf(project, group, healthMap, notes) {
+    return {
+        name: project.name,
+        path: project.path,
+        group: group || null,
+        summary: project.summary || '',
+        tech_tags: project.tech_tags || [],
+        has_git_repo: !!project.has_git_repo,
+        git_host: project.git_host || '',
+        git_remote_url: project.git_remote_url || '',
+        last_modified: project.last_modified || '',
+        disk_bytes: Number(project.disk_bytes) || 0,
+        file_count: Number(project.file_count) || 0,
+        improvement_idea: project.improvement_idea || '',
+        health_issues: (healthMap[project.path] || []).map((i) => i.message),
+        note: (notes[project.path] || '').trim(),
+    };
+}
+
+function buildSnapshot({ filteredProjects, stats, filters, healthMap }) {
+    const notes = loadStoredNotes();
+    const leaves = [];
+    for (const project of filteredProjects) {
+        if (project.children && project.children.length > 0) {
+            for (const child of project.children) {
+                leaves.push(snapshotLeaf(child, project.name, healthMap, notes));
+            }
+        } else {
+            leaves.push(snapshotLeaf(project, null, healthMap, notes));
+        }
+    }
+    return {
+        title: 'Fable5 Projects Dashboard',
+        generated_at: new Date().toISOString(),
+        overview: {
+            total_projects: stats.total,
+            with_git_repo: stats.withGit,
+            shown_in_snapshot: leaves.length,
+        },
+        filters: describeFilters(filters),
+        projects: leaves,
+    };
+}
+
+function snapshotToJson(snapshot) {
+    return JSON.stringify(snapshot, null, 2);
+}
+
+function snapshotToMarkdown(snapshot) {
+    const lines = [];
+    const when = new Date(snapshot.generated_at);
+    lines.push(`# ${snapshot.title} — Snapshot`, '');
+    lines.push(`_Generated ${when.toLocaleString()}_`, '');
+
+    lines.push('## Overview', '');
+    lines.push(`- **Total projects:** ${snapshot.overview.total_projects}`);
+    lines.push(`- **With Git repo:** ${snapshot.overview.with_git_repo}`);
+    lines.push(`- **Shown in this snapshot:** ${snapshot.overview.shown_in_snapshot}`, '');
+
+    const f = snapshot.filters;
+    lines.push('### Active filters', '');
+    lines.push(`- **Search:** ${f.search ? `"${f.search}"` : '—'}`);
+    lines.push(`- **Repo:** ${f.repo}`);
+    lines.push(`- **Stack:** ${f.stack}`);
+    lines.push(`- **Sort:** ${f.sort}`, '');
+
+    lines.push('## Projects', '');
+    if (snapshot.projects.length === 0) {
+        lines.push('_No projects match the current filters._', '');
+    }
+
+    let currentGroup = null;
+    for (const p of snapshot.projects) {
+        if (p.group && p.group !== currentGroup) {
+            currentGroup = p.group;
+            lines.push(`### ${p.group}`, '');
+        } else if (!p.group) {
+            currentGroup = null;
+        }
+
+        lines.push(`#### ${p.name}`);
+        if (p.summary) lines.push(p.summary);
+        const meta = [];
+        if (p.tech_tags.length) meta.push(`**Stack:** ${p.tech_tags.join(', ')}`);
+        meta.push(`**Git:** ${p.has_git_repo
+            ? (p.git_remote_url || p.git_host || 'repo')
+            : 'No repo'}`);
+        if (p.last_modified) {
+            meta.push(`**Updated:** ${new Date(p.last_modified).toLocaleString()}`);
+        }
+        meta.push(`**Size:** ${formatBytes(p.disk_bytes)} · ${formatCount(p.file_count)}`);
+        for (const m of meta) lines.push(`- ${m}`);
+        if (p.health_issues.length) {
+            lines.push(`- **Health:** ${p.health_issues.join('; ')}`);
+        }
+        if (p.improvement_idea) lines.push(`- **Improvement:** ${p.improvement_idea}`);
+        if (p.note) lines.push(`- **Note:** ${p.note}`);
+        lines.push('');
+    }
+
+    return lines.join('\n');
+}
+
+function downloadTextFile(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function ExportSnapshotModal({ snapshot, onClose }) {
+    const [format, setFormat] = useState('markdown');
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        function onKey(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const content = useMemo(
+        () => (format === 'json' ? snapshotToJson(snapshot) : snapshotToMarkdown(snapshot)),
+        [format, snapshot],
+    );
+
+    const stamp = snapshot.generated_at.slice(0, 19).replace(/[:T]/g, '-');
+    const filename = `dashboard-snapshot-${stamp}.${format === 'json' ? 'json' : 'md'}`;
+    const mime = format === 'json' ? 'application/json' : 'text/markdown';
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(content);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // Ignore clipboard failures silently.
+        }
+    };
+
+    return (
+        <div className="palette-backdrop" onClick={onClose} role="presentation">
+            <div
+                className="palette export-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Export dashboard snapshot"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="palette-head">
+                    <h2>Export Dashboard Snapshot</h2>
+                    <button className="palette-close" type="button" onClick={onClose} aria-label="Close">✕</button>
+                </div>
+                <div className="export-controls">
+                    <div className="filter-group">
+                        <button
+                            className={`filter-btn${format === 'markdown' ? ' active' : ''}`}
+                            type="button"
+                            onClick={() => setFormat('markdown')}
+                        >
+                            Markdown
+                        </button>
+                        <button
+                            className={`filter-btn${format === 'json' ? ' active' : ''}`}
+                            type="button"
+                            onClick={() => setFormat('json')}
+                        >
+                            JSON
+                        </button>
+                    </div>
+                    <span className="export-meta">
+                        {snapshot.overview.shown_in_snapshot} project
+                        {snapshot.overview.shown_in_snapshot === 1 ? '' : 's'} · {filename}
+                    </span>
+                </div>
+                <textarea
+                    className="export-preview"
+                    value={content}
+                    readOnly
+                    spellCheck={false}
+                    aria-label="Snapshot preview"
+                />
+                <div className="export-actions">
+                    <button className="action-btn" type="button" onClick={handleCopy}>
+                        {copied ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                        className="action-btn action-btn--run"
+                        type="button"
+                        onClick={() => downloadTextFile(filename, content, mime)}
+                    >
+                        ⤓ Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 function ShortcutPalette({ onClose }) {
     // Close on Escape regardless of focus while the overlay is mounted.
@@ -1020,6 +1249,7 @@ function App() {
     const [techFilter, setTechFilter] = useState(() => loadStoredFilters().techFilter);
     const [sortBy, setSortBy] = useState(() => loadStoredFilters().sortBy);
     const [paletteOpen, setPaletteOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
     const searchRef = useRef(null);
 
     const filtersAtDefault =
@@ -1273,6 +1503,9 @@ function App() {
                 case 'c':
                     window.location.hash = COMPARE_HASH;
                     break;
+                case 'e':
+                    setExportOpen(true);
+                    break;
                 case 'r':
                     resetFilters();
                     break;
@@ -1377,6 +1610,14 @@ function App() {
                     <button
                         className="action-btn"
                         type="button"
+                        onClick={() => setExportOpen(true)}
+                        title="Export a shareable snapshot of the current dashboard (press e)"
+                    >
+                        ⤓ Export Snapshot
+                    </button>
+                    <button
+                        className="action-btn"
+                        type="button"
                         onClick={() => setPaletteOpen(true)}
                         title="Show keyboard shortcuts (press ?)"
                     >
@@ -1419,6 +1660,17 @@ function App() {
                 </>
             )}
             {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
+            {exportOpen && (
+                <ExportSnapshotModal
+                    snapshot={buildSnapshot({
+                        filteredProjects,
+                        stats,
+                        filters: { query, repoFilter, techFilter, sortBy },
+                        healthMap,
+                    })}
+                    onClose={() => setExportOpen(false)}
+                />
+            )}
         </div>
     );
 }
