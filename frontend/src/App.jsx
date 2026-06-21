@@ -94,6 +94,81 @@ function FreshnessHeatmap({ leaves }) {
     );
 }
 
+// ── Stack overlap matrix ─────────────────────────────────────────────────────
+function StackOverlapMatrix({ leaves, onCompare }) {
+    const [open, setOpen] = useState(false);
+
+    const { tagMap, uniqueCount } = useMemo(() => {
+        const map = new Map();
+        for (const p of leaves) {
+            for (const tag of (p.tech_tags || [])) {
+                if (!map.has(tag)) map.set(tag, []);
+                map.get(tag).push(p);
+            }
+        }
+        const entries = [...map.entries()]
+            .filter(([, projects]) => projects.length >= 2)
+            .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+        const seen = new Set();
+        for (const [, ps] of entries) for (const p of ps) seen.add(p.path);
+        return { tagMap: entries, uniqueCount: seen.size };
+    }, [leaves]);
+
+    if (tagMap.length === 0) return null;
+
+    return (
+        <div className="stack-matrix">
+            <button
+                className="heatmap-toggle"
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+            >
+                <span className="heatmap-toggle-icon">{open ? '▾' : '▸'}</span>
+                <span className="heatmap-toggle-label">Stack Overlap Matrix</span>
+                <span className="heatmap-toggle-meta">
+                    <span className="heatmap-pill heatmap-pill--fresh">
+                        {tagMap.length} shared {tagMap.length === 1 ? 'tag' : 'tags'}
+                    </span>
+                    <span className="heatmap-pill stack-matrix-pill-count">
+                        {uniqueCount} projects
+                    </span>
+                </span>
+            </button>
+            {open && (
+                <div className="heatmap-body stack-matrix-body">
+                    <p className="stack-matrix-hint">
+                        Tags used by 2+ projects. Click a project to open it in the compare view.
+                    </p>
+                    <div className="stack-matrix-rows">
+                        {tagMap.map(([tag, projects]) => (
+                            <div key={tag} className="stack-matrix-row">
+                                <div className="stack-matrix-tag-col">
+                                    <span className="tech-tag">{tag}</span>
+                                    <span className="stack-matrix-count">{projects.length}</span>
+                                </div>
+                                <div className="stack-matrix-projects">
+                                    {projects.map((p) => (
+                                        <button
+                                            key={p.path}
+                                            className="stack-matrix-project"
+                                            type="button"
+                                            onClick={() => onCompare(p.path)}
+                                            title={`Compare ${p.name}`}
+                                        >
+                                            {p.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const RUNS_HASH = '#last-second-runs';
 const ACTIVITY_HASH = '#activity';
 const COMPARE_HASH = '#compare';
@@ -2371,6 +2446,10 @@ function App() {
             {!loading && !error && (
                 <>
                     <FreshnessHeatmap leaves={allLeaves} />
+                    <StackOverlapMatrix
+                        leaves={allLeaves}
+                        onCompare={(path) => { window.location.hash = compareHashFor(path); }}
+                    />
                     <SearchBar
                         query={query}
                         onQuery={setQuery}

@@ -1484,6 +1484,88 @@ h1 {
     letter-spacing: 0.3px;
 }
 
+/* ── Stack overlap matrix ───────────────────────────────────────────────── */
+.stack-matrix {
+    background: rgba(12, 16, 31, 0.6);
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.stack-matrix-pill-count {
+    background: rgba(48, 58, 103, 0.55);
+    color: var(--muted);
+    border: 1px solid rgba(48, 58, 103, 0.8);
+}
+
+.stack-matrix-body {
+    padding: 0.5rem 0.9rem 0.8rem;
+}
+
+.stack-matrix-hint {
+    margin: 0 0 0.6rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.stack-matrix-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.stack-matrix-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+}
+
+.stack-matrix-tag-col {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+    min-width: 130px;
+}
+
+.stack-matrix-count {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--muted);
+    background: rgba(48, 58, 103, 0.5);
+    border-radius: 999px;
+    padding: 0.08rem 0.42rem;
+    letter-spacing: 0.3px;
+}
+
+.stack-matrix-projects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.32rem;
+    padding-top: 0.1rem;
+}
+
+.stack-matrix-project {
+    background: rgba(60, 182, 255, 0.08);
+    border: 1px solid rgba(60, 182, 255, 0.25);
+    border-radius: 6px;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.71rem;
+    font-family: inherit;
+    font-weight: 500;
+    padding: 0.15rem 0.55rem;
+    transition: background 0.13s, border-color 0.13s, transform 0.12s;
+    white-space: nowrap;
+}
+
+.stack-matrix-project:hover {
+    background: rgba(60, 182, 255, 0.18);
+    border-color: rgba(60, 182, 255, 0.55);
+    transform: translateY(-1px);
+}
+
 /* ── Custom grouping rules ──────────────────────────────────────────────── */
 .group-manage-btn {
     text-transform: none;

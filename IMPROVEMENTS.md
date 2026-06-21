@@ -629,3 +629,51 @@ anything left over is shown under **Ungrouped**.
   reviewed by hand; backend changes are self-contained and additive, and the
   frontend changes don't alter existing routes, fetches, or the folder-grouping
   path (custom rendering is gated behind `groupMode === 'custom'`).
+
+## [Polish] Stack Overlap Matrix
+
+A collapsible panel between the Freshness Heatmap and the search bar that shows
+which projects share the same languages or frameworks at a glance.
+
+### What it shows
+
+For every tech tag used by **two or more** projects, a row is shown with:
+- The tag chip (same style as tech stack tags on project cards)
+- A count badge showing how many projects share it
+- Clickable project name pills — clicking any pill navigates to the Compare view
+  with that project preselected as Project A
+
+Tags used by only one project are omitted (no overlap to show). Rows are sorted
+by project count descending (most-shared tags first). The panel header shows a
+summary: "N shared tags · M projects".
+
+### Implementation (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+
+- **Pure frontend**: reuses the `tech_tags` field already returned by
+  `/api/projects` — no backend changes needed.
+- New `StackOverlapMatrix({ leaves, onCompare })` component placed in `App.jsx`
+  directly after `FreshnessHeatmap`. Follows the same collapsible-toggle pattern
+  (reuses `.heatmap-toggle`, `.heatmap-pill`, `.heatmap-body`), defaulting to
+  collapsed so it doesn't dominate the page.
+- Single `useMemo` computes both the tag → project map (filtered to ≥2 projects)
+  and the unique project count in one pass — both are needed before the early
+  `return null` guard, so no hooks ordering issue.
+- Clicking a project pill calls `onCompare(path)`, which sets the URL hash to
+  `#compare/<encoded-path>`, dropping the user into the existing Compare page
+  with that project preselected.
+- Returns `null` when no tags are shared (zero entries), so the panel doesn't
+  appear in workspaces with fully unique stacks.
+- New CSS block (`.stack-matrix*`) in `styles.css` immediately after the
+  freshness heatmap section. Reuses existing tokens (`--accent`, `--muted`,
+  `--card-border`, `--card`) and the existing `.tech-tag` pill style for
+  consistency.
+
+### Scope / notes
+- Tags are matched exactly as inferred by `infer_tech_tags()` in `main.py`
+  (e.g. "React", "FastAPI", "Python"). No normalisation beyond what the backend
+  already provides.
+- The matrix reflects `allLeaves` (all projects, not the filtered subset) so it
+  gives a stable overview regardless of what's in the search box.
+- Could not run `npm run build` here (interactive approval required in this
+  environment); changes were reviewed by hand and are purely additive — no
+  existing routes, fetches, or components were modified.
