@@ -90,6 +90,7 @@ class HealthSignal(BaseModel):
 class HealthIssue(BaseModel):
     level: str  # 'warning' | 'error'
     message: str
+    category: str = "other"  # 'readme' | 'deps' | 'git' | 'other' — drives the badge shown
 
 
 class ProjectHealth(BaseModel):
@@ -751,7 +752,7 @@ def check_project_health(project_dir: Path) -> list[HealthIssue]:
     # Missing README
     has_readme = any(name in entries for name in [c.lower() for c in README_CANDIDATES])
     if not has_readme:
-        issues.append(HealthIssue(level="warning", message="Missing README"))
+        issues.append(HealthIssue(level="warning", message="Missing README", category="readme"))
 
     # Detect backend / frontend subdirs
     has_backend_dir = (project_dir / "backend").is_dir()
@@ -763,15 +764,15 @@ def check_project_health(project_dir: Path) -> list[HealthIssue]:
         req_file = backend_dir / "requirements.txt"
         py_files = list(backend_dir.glob("*.py"))
         if py_files and not req_file.exists():
-            issues.append(HealthIssue(level="warning", message="Backend missing requirements.txt"))
+            issues.append(HealthIssue(level="warning", message="Backend missing requirements.txt", category="deps"))
     elif any(name.endswith(".py") for name in entries):
         if "requirements.txt" not in entries:
-            issues.append(HealthIssue(level="warning", message="Missing requirements.txt"))
+            issues.append(HealthIssue(level="warning", message="Missing requirements.txt", category="deps"))
 
     # Missing package.json for Node/frontend projects
     if has_frontend_dir:
         if not (project_dir / "frontend" / "package.json").exists():
-            issues.append(HealthIssue(level="warning", message="Frontend missing package.json"))
+            issues.append(HealthIssue(level="warning", message="Frontend missing package.json", category="deps"))
     elif "index.html" in entries and "package.json" not in entries:
         pass  # static HTML — no package.json expected
 
@@ -786,7 +787,8 @@ def check_project_health(project_dir: Path) -> list[HealthIssue]:
                 lines = result.stdout.strip().splitlines()
                 issues.append(HealthIssue(
                     level="warning",
-                    message=f"{len(lines)} uncommitted change{'s' if len(lines) != 1 else ''}"
+                    message=f"{len(lines)} uncommitted change{'s' if len(lines) != 1 else ''}",
+                    category="git",
                 ))
         except (subprocess.TimeoutExpired, OSError):
             pass

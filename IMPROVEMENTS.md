@@ -904,3 +904,55 @@ New `.empty-state*` block (before the skeleton section):
   were reviewed by hand and are purely additive — no existing routes, fetches,
   or components were modified (only the invocation call-sites for
   `ActivityFeedPage` and `LastSecondRunsPage` gained an `onRetry` prop).
+
+---
+
+## [New capability] Project health badges — categorised README / deps / git checks
+
+### What changed
+
+The dashboard already computed per-project health issues (missing README,
+missing `requirements.txt`/`package.json`, uncommitted git changes) and
+surfaced them through `/api/projects/health`, but the UI collapsed every issue
+into a single undifferentiated `⚠ N` count. You couldn't tell *what* was wrong
+without opening the popover.
+
+This change makes each issue **category** a first-class, glanceable badge.
+
+### Backend (`backend/main.py`)
+
+- Added a `category` field to the `HealthIssue` model
+  (`'readme' | 'deps' | 'git' | 'other'`, default `'other'` for backward
+  compatibility).
+- Tagged each existing check in `check_project_health` with its category:
+  - Missing README → `readme`
+  - Missing `requirements.txt` / `package.json` (backend, frontend, or flat
+    project) → `deps`
+  - Uncommitted git changes → `git`
+
+No new endpoints, no new dependencies — the `/api/projects/health` response
+just carries one extra field per issue.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+
+- Rewrote `HealthBadge` to render one coloured pill per distinct category
+  present (ordered README → deps → git → other), each with an icon and short
+  label (📄 README, 📦 deps, ⎇ git). The full per-issue list is still available
+  in the click-through popover, now icon-prefixed by category.
+- A new `HEALTH_CATEGORY_META` map centralises the icon/label per category and
+  drives both the pills and the popover, with a safe `|| 'other'` fallback so
+  any future/unknown category still renders.
+- CSS: replaced the single amber `.health-badge` pill with a flex row of
+  `.health-pill--{readme,deps,git,other}` variants (blue / purple / amber /
+  red), and switched popover issue rows from a `::before` bullet to an inline
+  category icon.
+
+### Scope / notes
+
+- Fully backward compatible: existing consumers read only `.message` / `.level`
+  (snapshot export, popover) and are untouched; `.category` is additive.
+- Could not run `python`/`npm run build` here (interactive approval required in
+  this environment); changes were reviewed by hand. They are additive and the
+  new field has a default, so the existing `backend/test_health_score.py`
+  fixtures continue to construct valid models.
+- Not committed, per instructions.

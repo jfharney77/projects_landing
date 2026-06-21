@@ -891,6 +891,16 @@ function LastSecondRunsPage({ runs, loading, error, onBack, onRetry }) {
     );
 }
 
+// Compact, glanceable badge per health-issue category. Each maps a backend
+// `category` to an icon + short label so a missing README, missing deps file,
+// and uncommitted changes are individually recognisable on the card.
+const HEALTH_CATEGORY_META = {
+    readme: { icon: '📄', short: 'README' },
+    deps: { icon: '📦', short: 'deps' },
+    git: { icon: '⎇', short: 'git' },
+    other: { icon: '⚠', short: 'issue' },
+};
+
 function HealthBadge({ issues }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
@@ -906,25 +916,44 @@ function HealthBadge({ issues }) {
 
     if (!issues || issues.length === 0) return null;
 
+    // One pill per distinct category present, ordered readme → deps → git → other.
+    const order = ['readme', 'deps', 'git', 'other'];
+    const present = order.filter((cat) =>
+        issues.some((i) => (i.category || 'other') === cat));
+
     return (
         <div className="health-badge-wrap" ref={ref}>
             <button
                 className="health-badge"
                 type="button"
                 onClick={() => setOpen((o) => !o)}
-                title={`${issues.length} issue${issues.length !== 1 ? 's' : ''}`}
+                title={`${issues.length} health issue${issues.length !== 1 ? 's' : ''} — click for details`}
+                aria-label={`${issues.length} health issues`}
             >
-                ⚠ {issues.length}
+                {present.map((cat) => {
+                    const meta = HEALTH_CATEGORY_META[cat] || HEALTH_CATEGORY_META.other;
+                    return (
+                        <span key={cat} className={`health-pill health-pill--${cat}`}>
+                            <span className="health-pill-icon" aria-hidden="true">{meta.icon}</span>
+                            {meta.short}
+                        </span>
+                    );
+                })}
             </button>
             {open && (
                 <div className="health-popover">
                     <p className="health-popover-title">Health Issues</p>
                     <ul className="health-issue-list">
-                        {issues.map((issue, i) => (
-                            <li key={i} className={`health-issue health-issue--${issue.level}`}>
-                                {issue.message}
-                            </li>
-                        ))}
+                        {issues.map((issue, i) => {
+                            const cat = issue.category || 'other';
+                            const meta = HEALTH_CATEGORY_META[cat] || HEALTH_CATEGORY_META.other;
+                            return (
+                                <li key={i} className={`health-issue health-issue--${issue.level}`}>
+                                    <span className="health-issue-icon" aria-hidden="true">{meta.icon}</span>
+                                    {issue.message}
+                                </li>
+                            );
+                        })}
                     </ul>
                 </div>
             )}

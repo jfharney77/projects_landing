@@ -874,21 +874,61 @@ h1 {
 }
 
 .health-badge {
-    background: rgba(255, 180, 40, 0.15);
-    border: 1px solid rgba(255, 180, 40, 0.5);
-    border-radius: 999px;
-    color: #ffe4a0;
+    background: none;
+    border: none;
     cursor: pointer;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    padding: 0.18rem 0.52rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0;
     white-space: nowrap;
 }
 
-.health-badge:hover {
-    background: rgba(255, 180, 40, 0.28);
-    border-color: rgba(255, 180, 40, 0.8);
+/* One categorised pill (README / deps / git / other). */
+.health-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 0.16rem 0.46rem;
+    border: 1px solid transparent;
+    transition: filter 0.12s ease;
+}
+
+.health-badge:hover .health-pill {
+    filter: brightness(1.18);
+}
+
+.health-pill-icon {
+    font-size: 0.78rem;
+    line-height: 1;
+}
+
+.health-pill--readme {
+    background: rgba(120, 170, 255, 0.16);
+    border-color: rgba(120, 170, 255, 0.5);
+    color: #cfe0ff;
+}
+
+.health-pill--deps {
+    background: rgba(190, 140, 255, 0.16);
+    border-color: rgba(190, 140, 255, 0.5);
+    color: #e6d4ff;
+}
+
+.health-pill--git {
+    background: rgba(255, 180, 40, 0.15);
+    border-color: rgba(255, 180, 40, 0.5);
+    color: #ffe4a0;
+}
+
+.health-pill--other {
+    background: rgba(255, 120, 120, 0.15);
+    border-color: rgba(255, 120, 120, 0.5);
+    color: #ffd8d8;
 }
 
 .health-popover {
@@ -926,30 +966,22 @@ h1 {
 .health-issue {
     font-size: 0.83rem;
     line-height: 1.4;
-    padding-left: 1rem;
-    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
 }
 
-.health-issue::before {
-    content: '•';
-    position: absolute;
-    left: 0;
+.health-issue-icon {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
 }
 
 .health-issue--warning {
     color: #ffe4a0;
 }
 
-.health-issue--warning::before {
-    color: rgba(255, 180, 40, 0.8);
-}
-
 .health-issue--error {
     color: #ffd8d8;
-}
-
-.health-issue--error::before {
-    color: var(--danger);
 }
 
 /* ── Health score ring ───────────────────────────────────────────────────── */
