@@ -464,3 +464,37 @@ server-side so they persist across restarts and are shared across browsers.
   (create → list → toggle → clear → delete), input validation, and progress counts,
   and runs with only the backend's existing deps via
   `./.venv/bin/python test_milestones.py`.
+
+## Repo Freshness Heatmap
+
+Added a compact freshness heatmap between the hero section and the search bar
+that gives an at-a-glance view of activity intensity across all projects.
+
+### What it shows
+Each project appears as a small colored tile with its name and age. The color
+encodes how recently the project was modified:
+
+| Color  | Bucket        |
+|--------|---------------|
+| Green  | Modified today |
+| Teal   | Within 1 week  |
+| Blue   | Within 1 month |
+| Amber  | Within 3 months |
+| Orange | Within 6 months |
+| Dim red | 6+ months ago |
+
+A summary pill row on the toggle button shows "N fresh / N stale" counts at a
+glance without needing to expand the map.
+
+### Implementation (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- `FRESHNESS_BUCKETS` constant — six age buckets with color + contrasting text color.
+- `freshnessFor(epochSeconds)` — maps a `last_modified_epoch` to its bucket.
+- `FreshnessHeatmap({ leaves })` — collapsible component (default open) that renders:
+  - A `.heatmap-grid` of `.heatmap-cell` tiles colored via CSS custom properties
+    `--cell-bg` / `--cell-text`.
+  - Each cell shows the project name (truncated) and a human-readable age label.
+  - A `.heatmap-legend` strip below the grid with color chip + label per bucket.
+  - Summary pills ("N fresh", "N stale") on the toggle header.
+- No backend changes needed — reuses `last_modified_epoch` already returned by
+  `GET /api/projects`.
+- Placed in `App` just above `<SearchBar>` so it renders on the main dashboard.

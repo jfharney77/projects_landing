@@ -6,6 +6,94 @@ const SORT_OPTIONS = [
     { value: 'name', label: 'Name A-Z' },
 ];
 
+// ── Freshness heatmap ────────────────────────────────────────────────────────
+const FRESHNESS_BUCKETS = [
+    { label: 'Today',    maxDays: 1,    color: '#30d18b', textColor: '#0a2218' },
+    { label: '< 1 week', maxDays: 7,    color: '#27c8b5', textColor: '#05201c' },
+    { label: '< 1 month',maxDays: 30,   color: '#3cb6ff', textColor: '#062030' },
+    { label: '< 3 months',maxDays: 90,  color: '#f0a940', textColor: '#2a1a00' },
+    { label: '< 6 months',maxDays: 180, color: '#e06530', textColor: '#2a0d00' },
+    { label: '6 months+', maxDays: Infinity, color: '#7a5060', textColor: '#e0c8d0' },
+];
+const FRESHNESS_UNKNOWN = { label: 'Unknown', color: '#2a3558', textColor: '#8fa0d8' };
+
+function freshnessFor(epochSeconds) {
+    const days = ageInDays(epochSeconds);
+    if (days === null) return FRESHNESS_UNKNOWN;
+    return FRESHNESS_BUCKETS.find((b) => days < b.maxDays) || FRESHNESS_BUCKETS[FRESHNESS_BUCKETS.length - 1];
+}
+
+function FreshnessHeatmap({ leaves }) {
+    const [open, setOpen] = useState(true);
+
+    const bucketCounts = useMemo(() => {
+        const counts = new Array(FRESHNESS_BUCKETS.length).fill(0);
+        let unknown = 0;
+        for (const p of leaves) {
+            const days = ageInDays(p.last_modified_epoch);
+            if (days === null) { unknown++; continue; }
+            const idx = FRESHNESS_BUCKETS.findIndex((b) => days < b.maxDays);
+            if (idx >= 0) counts[idx]++;
+            else counts[counts.length - 1]++;
+        }
+        return { counts, unknown };
+    }, [leaves]);
+
+    const freshCount = bucketCounts.counts[0] + bucketCounts.counts[1];
+    const staleCount = bucketCounts.counts[4] + bucketCounts.counts[5] + bucketCounts.unknown;
+
+    return (
+        <div className="freshness-heatmap">
+            <button
+                className="heatmap-toggle"
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+            >
+                <span className="heatmap-toggle-icon">{open ? '▾' : '▸'}</span>
+                <span className="heatmap-toggle-label">Freshness Map</span>
+                <span className="heatmap-toggle-meta">
+                    {freshCount > 0 && <span className="heatmap-pill heatmap-pill--fresh">{freshCount} fresh</span>}
+                    {staleCount > 0 && <span className="heatmap-pill heatmap-pill--stale">{staleCount} stale</span>}
+                </span>
+            </button>
+            {open && (
+                <div className="heatmap-body">
+                    <div className="heatmap-grid" role="list" aria-label="Project freshness grid">
+                        {leaves.map((p) => {
+                            const bucket = freshnessFor(p.last_modified_epoch);
+                            const days = ageInDays(p.last_modified_epoch);
+                            const ageLabel = days === null ? 'unknown age'
+                                : days < 1 ? 'today'
+                                : `${Math.round(days)}d ago`;
+                            return (
+                                <div
+                                    key={p.path}
+                                    className="heatmap-cell"
+                                    role="listitem"
+                                    style={{ '--cell-bg': bucket.color, '--cell-text': bucket.textColor }}
+                                    title={`${p.name} · ${ageLabel}`}
+                                >
+                                    <span className="heatmap-cell-name">{p.name}</span>
+                                    <span className="heatmap-cell-age">{ageLabel}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="heatmap-legend" aria-label="Freshness color scale">
+                        {FRESHNESS_BUCKETS.map((b) => (
+                            <span key={b.label} className="heatmap-legend-item">
+                                <span className="heatmap-legend-swatch" style={{ background: b.color }} />
+                                <span className="heatmap-legend-label">{b.label}</span>
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const RUNS_HASH = '#last-second-runs';
 const ACTIVITY_HASH = '#activity';
 const COMPARE_HASH = '#compare';
@@ -1837,6 +1925,7 @@ function App() {
 
             {!loading && !error && (
                 <>
+                    <FreshnessHeatmap leaves={allLeaves} />
                     <SearchBar
                         query={query}
                         onQuery={setQuery}
