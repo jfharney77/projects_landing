@@ -393,6 +393,40 @@ h1 {
     box-shadow: 0 0 5px rgba(249, 115, 22, 0.7);
 }
 
+.copy-path-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+
+.project-card:hover .copy-path-btn,
+.copy-path-btn:focus-visible {
+    opacity: 1;
+}
+
+.copy-path-btn:hover {
+    color: var(--accent);
+    background: rgba(60, 182, 255, 0.12);
+}
+
+.copy-path-btn--copied {
+    opacity: 1;
+    color: var(--accent-2);
+}
+
 .project-card p {
     margin: 0.8rem 0 0;
     color: var(--muted);

@@ -1199,9 +1199,13 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
         ? `${API_BASE}/api/readme/${encodeProjectPath(project.path)}`
         : '');
 
+    const [pathCopied, setPathCopied] = useState(false);
+
     const copyPath = async () => {
         try {
             await navigator.clipboard.writeText(project.path);
+            setPathCopied(true);
+            setTimeout(() => setPathCopied(false), 1800);
         } catch {
             // Ignore clipboard failures silently to avoid noisy UX.
         }
@@ -1234,6 +1238,15 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
                             aria-label="Uncommitted changes"
                         />
                     )}
+                    <button
+                        className={`copy-path-btn${pathCopied ? ' copy-path-btn--copied' : ''}`}
+                        type="button"
+                        onClick={copyPath}
+                        title={pathCopied ? 'Copied!' : `Copy path: ${project.path}`}
+                        aria-label={`Copy filesystem path of ${project.name}`}
+                    >
+                        {pathCopied ? '✓' : '⎘'}
+                    </button>
                 </h2>
                 <div className="tag-group">
                     <GitTags project={project} />
@@ -1306,7 +1319,6 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
                 >
                     ⚖ Compare
                 </button>
-                <button className="action-btn" type="button" onClick={copyPath}>Copy Path</button>
                 <ProjectMilestones project={project} />
                 <ProjectNotes project={project} />
             </div>

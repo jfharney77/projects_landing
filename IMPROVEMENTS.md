@@ -731,3 +731,33 @@ work without opening the health-issues popover.
   dot sits vertically centred next to the name without affecting text wrap.
 - `.git-dirty-dot`: 8 px orange circle (`#f97316`) with a soft orange glow, using
   `flex-shrink: 0` so it never squashes under long project names.
+
+## [Dev ergo] One-click copy path
+
+A tiny clipboard icon (`⎘`) in each project card's title row copies the absolute
+filesystem path to the clipboard in one click, saving the manual lookup when
+opening a terminal to the project.
+
+### What changed
+- **Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+- `ProjectCard` gains a `pathCopied` state and a `<button className="copy-path-btn">`
+  placed inside the existing `<h2>` (after the git-dirty dot), so it sits at the
+  top of the card next to the project name rather than buried in the action row.
+- The icon is `⎘` (Unicode HELM SYMBOL, conventional for "copy"); it switches to
+  `✓` for 1.8 s after a successful copy, giving clear visual confirmation without
+  a toast or modal.
+- The `title` tooltip shows "Copied!" while the checkmark is active; otherwise it
+  shows the full path (e.g. `Copy path: /home/john/fable5/projects_landing`).
+- The old "Copy Path" text button in `card-actions` is removed — the icon is a
+  strictly better replacement.
+- `.copy-path-btn` CSS: hidden by default (`opacity: 0`), revealed on
+  `.project-card:hover` or `:focus-visible` (keyboard-reachable). Hover state
+  uses the accent colour; the "copied" state uses `--accent-2` (green) to match
+  other success indicators. No layout impact — the h2 already uses `display: flex`.
+
+### Scope / notes
+- Uses `navigator.clipboard.writeText`; silently swallows failures (private mode,
+  no permission) as the rest of the codebase does.
+- The `⎘` character renders without an emoji font, so it scales cleanly with the
+  surrounding text rather than pulling in a color-emoji glyph.
+- Changes are purely additive/replacements in the frontend; no backend touches.
