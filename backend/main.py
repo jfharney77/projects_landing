@@ -96,6 +96,27 @@ class ActivityEvent(BaseModel):
     age_seconds: float    # how long ago, relative to scan time
 
 
+class CodeownersRule(BaseModel):
+    pattern: str          # path glob the rule applies to (e.g. '*', '/docs/')
+    owners: list[str]     # owners for that pattern (@user, @org/team, or email)
+
+
+class ProjectOwnership(BaseModel):
+    name: str
+    path: str                              # relative to ROOT_DIR
+    has_codeowners: bool = False
+    codeowners_path: str = ""              # location of the file, relative to project
+    codeowners_rules: list[CodeownersRule] = []
+    codeowners_owners: list[str] = []      # distinct owners parsed from CODEOWNERS
+    maintainers: list[str] = []            # manually assigned (persisted sidecar)
+    source: str = "none"                   # 'codeowners' | 'manual' | 'both' | 'none'
+
+
+class AssignMaintainersRequest(BaseModel):
+    project_path: str
+    maintainers: list[str] = []            # full replacement list for the project
+
+
 class LastSecondRunSummary(BaseModel):
     name: str
     path: str
