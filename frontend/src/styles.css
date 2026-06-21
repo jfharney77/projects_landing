@@ -378,6 +378,19 @@ h1 {
     margin: 0;
     font-size: 1.1rem;
     word-break: break-word;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.git-dirty-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #f97316;
+    box-shadow: 0 0 5px rgba(249, 115, 22, 0.7);
 }
 
 .project-card p {

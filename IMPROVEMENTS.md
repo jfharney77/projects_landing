@@ -707,3 +707,27 @@ full help overlay.
   inside the final `return` of `App`, not the compare/activity/runs branches).
 - Could not run `npm run build` here (interactive approval required); changes
   were reviewed by hand — purely additive, no existing components modified.
+
+## [Polish] git status dirty indicator
+
+A small orange dot now appears in the title of any project card that has
+uncommitted changes, making it immediately obvious which projects have unsaved
+work without opening the health-issues popover.
+
+### Backend (`backend/main.py`)
+- New `check_git_dirty(project_dir)` helper: runs `git -C <dir> status --porcelain`
+  with a 5 s timeout; returns `True` when the exit code is 0 and stdout is non-empty.
+  Gracefully returns `False` if the project has no `.git` dir, git isn't on `$PATH`,
+  or the subprocess times out.
+- Added `git_dirty: bool = False` field to `ProjectSummary`.
+- `build_project()` now calls `check_git_dirty()` and sets the field, so it is
+  returned by `GET /api/projects` alongside all other card metadata.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- `ProjectCard` renders a `.git-dirty-dot` `<span>` immediately after the project
+  name (inside `<h2>`) when `project.git_dirty` is truthy. The span carries a
+  `title="Uncommitted changes"` tooltip for discoverability.
+- `<h2>` on `.project-card` now uses `display: flex; align-items: center` so the
+  dot sits vertically centred next to the name without affecting text wrap.
+- `.git-dirty-dot`: 8 px orange circle (`#f97316`) with a soft orange glow, using
+  `flex-shrink: 0` so it never squashes under long project names.

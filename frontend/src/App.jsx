@@ -1225,7 +1225,16 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
     return (
         <article className="project-card" style={{ '--card-delay': cardDelay }}>
             <div className="card-top">
-                <h2>{project.name}</h2>
+                <h2>
+                    {project.name}
+                    {project.git_dirty && (
+                        <span
+                            className="git-dirty-dot"
+                            title="Uncommitted changes"
+                            aria-label="Uncommitted changes"
+                        />
+                    )}
+                </h2>
                 <div className="tag-group">
                     <GitTags project={project} />
                     <HealthBadge issues={healthIssues} />

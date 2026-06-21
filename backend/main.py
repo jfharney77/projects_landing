@@ -71,6 +71,7 @@ class ProjectSummary(BaseModel):
     file_count: int = 0      # number of files in the project tree
     tech_tags: list[str] = []
     improvement_idea: str = ""
+    git_dirty: bool = False  # True when the repo has uncommitted changes
     children: list["ProjectSummary"] = []
 
 
@@ -1614,6 +1615,20 @@ def reorder_grouping_rules(req: ReorderGroupingRulesRequest) -> list[GroupingRul
     return [GroupingRule(**r) for r in _sorted_rules(rules)]
 
 
+def check_git_dirty(project_dir: Path) -> bool:
+    """Return True when the project's git repo has uncommitted changes."""
+    if not (project_dir / ".git").exists() or not shutil.which("git"):
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_dir), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def build_project(project_dir: Path) -> ProjectSummary:
     has_git = has_own_git_repo(project_dir)
     git_remote_url = detect_git_remote_url(project_dir) if has_git else ""
@@ -1638,6 +1653,7 @@ def build_project(project_dir: Path) -> ProjectSummary:
         file_count=file_count,
         tech_tags=tech_tags,
         improvement_idea=infer_improvement_idea(project_dir, tech_tags),
+        git_dirty=check_git_dirty(project_dir),
     )
 
 
