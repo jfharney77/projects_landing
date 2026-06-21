@@ -112,6 +112,44 @@ function parseComparePreselect(route) {
     }
 }
 
+const NOTES_STORAGE_KEY = 'projects-landing:notes';
+const NOTES_MAX_LENGTH = 2000;
+const NOTES_SAVE_DEBOUNCE_MS = 500;
+
+// Notes are a flat { [projectPath]: noteText } map persisted in localStorage so
+// per-project reminders / next steps / ownership context survive reloads.
+function loadStoredNotes() {
+    try {
+        const raw = window.localStorage.getItem(NOTES_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function readProjectNote(path) {
+    const note = loadStoredNotes()[path];
+    return typeof note === 'string' ? note : '';
+}
+
+// Persist (or clear, when empty) a single project's note without disturbing others.
+function writeProjectNote(path, text) {
+    try {
+        const all = loadStoredNotes();
+        const trimmed = text.trim();
+        if (trimmed) {
+            all[path] = text;
+        } else {
+            delete all[path];
+        }
+        window.localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(all));
+    } catch {
+        // Storage may be unavailable (private mode / quota) — ignore.
+    }
+}
+
 const FILTER_STORAGE_KEY = 'projects-landing:filters';
 const DEFAULT_FILTERS = { query: '', repoFilter: 'all', techFilter: 'all', sortBy: 'recent' };
 
@@ -401,6 +439,65 @@ function GitTags({ project }) {
     );
 }
 
+// Collapsible per-project notes field with debounced autosave to localStorage.
+function ProjectNotes({ project }) {
+    const [open, setOpen] = useState(false);
+    const [text, setText] = useState(() => readProjectNote(project.path));
+    const [saved, setSaved] = useState(false);
+    const saveTimer = useRef(null);
+
+    const hasNote = text.trim().length > 0;
+
+    const handleChange = (e) => {
+        const next = e.target.value.slice(0, NOTES_MAX_LENGTH);
+        setText(next);
+        setSaved(false);
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+            writeProjectNote(project.path, next);
+            setSaved(true);
+        }, NOTES_SAVE_DEBOUNCE_MS);
+    };
+
+    // Flush any pending save when the component unmounts.
+    useEffect(() => () => {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+    }, []);
+
+    return (
+        <div className="project-notes">
+            <button
+                className={`action-btn${hasNote ? ' action-btn--has-note' : ''}`}
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                title={hasNote ? 'Edit project notes' : 'Add a project note'}
+                aria-expanded={open}
+            >
+                📝 Notes{hasNote ? ' •' : ''}
+            </button>
+            {open && (
+                <div className="notes-panel">
+                    <textarea
+                        className="notes-textarea"
+                        value={text}
+                        onChange={handleChange}
+                        placeholder="Reminders, next steps, ownership context…"
+                        rows={4}
+                        maxLength={NOTES_MAX_LENGTH}
+                        aria-label={`Notes for ${project.name}`}
+                    />
+                    <div className="notes-footer">
+                        <span className="notes-status">
+                            {saved ? 'Saved' : text.trim() ? 'Editing…' : 'Stored locally in this browser'}
+                        </span>
+                        <span className="notes-count">{text.length}/{NOTES_MAX_LENGTH}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function ProjectCard({ project, onOpenRuns, healthIssues }) {
     const readmeHref = project.readme_url || (project.has_readme
         ? `${API_BASE}/api/readme/${encodeProjectPath(project.path)}`
@@ -494,6 +591,7 @@ function ProjectCard({ project, onOpenRuns, healthIssues }) {
                     ⚖ Compare
                 </button>
                 <button className="action-btn" type="button" onClick={copyPath}>Copy Path</button>
+                <ProjectNotes project={project} />
             </div>
         </article>
     );

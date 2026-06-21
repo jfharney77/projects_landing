@@ -451,6 +451,65 @@ h1 {
     cursor: pointer;
 }
 
+/* Let the Notes button sit inline with the other action buttons while its
+   panel drops onto its own full-width row within .card-actions. */
+.project-notes {
+    display: contents;
+}
+
+.action-btn--has-note {
+    border-color: rgba(60, 182, 255, 0.55);
+    background: rgba(60, 182, 255, 0.14);
+    color: #dff4ff;
+}
+
+.notes-panel {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.notes-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    min-height: 4.5rem;
+    border-radius: 10px;
+    border: 1px solid rgba(174, 183, 223, 0.35);
+    background: rgba(12, 18, 38, 0.6);
+    color: #e6ecff;
+    font: inherit;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    padding: 0.5rem 0.6rem;
+}
+
+.notes-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(12, 18, 38, 0.85);
+}
+
+.notes-textarea::placeholder {
+    color: #7d8bbf;
+}
+
+.notes-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+    color: #8fa0d8;
+}
+
+.notes-count {
+    font-variant-numeric: tabular-nums;
+}
+
 .tag {
     border-radius: 999px;
     padding: 0.22rem 0.62rem;

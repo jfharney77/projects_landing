@@ -165,3 +165,40 @@ stack, git status, and activity metadata in a single aligned table.
 - Could not run `npm run build` here (interactive approval required in this
   environment); changes were reviewed by hand and are additive — they reuse
   existing helpers and don't alter existing routes, fields, or behavior.
+
+## Per-Project Notes Panel (local reminders / next steps / ownership)
+
+Added a small notes field to every project card so you can jot down reminders,
+next steps, or ownership context. Notes are persisted locally per project and
+survive reloads — no backend changes required.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- New `localStorage`-backed store under the `projects-landing:notes` key, holding
+  a flat `{ [projectPath]: noteText }` map. Helpers `loadStoredNotes`,
+  `readProjectNote`, and `writeProjectNote` mirror the existing
+  `loadStoredFilters` pattern, including the same defensive try/catch around
+  storage access (private mode / quota).
+- `writeProjectNote` updates/clears a single project's entry without touching the
+  others; empty/whitespace-only notes are removed from the map rather than stored.
+- New `ProjectNotes` component rendered inside `ProjectCard`'s action row:
+  - A `📝 Notes` toggle button; shows a `•` marker and an accent style
+    (`action-btn--has-note`) when a note already exists.
+  - When open, a textarea with placeholder guidance, a 2000-char cap, a live
+    character count, and a save-status line (`Editing…` → `Saved`).
+  - Debounced autosave (500ms) so typing isn't written on every keystroke; a
+    cleanup effect clears any pending timer on unmount.
+  - Keyed by `project.path`, so each project (including grouped children) keeps
+    its own independent note.
+- CSS: `.project-notes` uses `display: contents` so the button stays inline with
+  the other action buttons while `.notes-panel` (with `flex-basis: 100%`) drops
+  onto its own full-width row within `.card-actions`. Textarea/footer styling
+  reuses the existing dark palette and accent variables.
+
+### Scope / notes
+- Notes live in the browser's `localStorage`, so they are per-browser/device and
+  not shared across machines. A future enhancement could persist them via a
+  backend endpoint if cross-device sync is desired.
+- Could not run `npm run build` here (interactive approval required in this
+  environment); changes were reviewed by hand and are purely additive — they add
+  one component and one storage key without altering existing routes, fields,
+  fetches, or behavior.
