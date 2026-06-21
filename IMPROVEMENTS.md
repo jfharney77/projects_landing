@@ -846,3 +846,61 @@ while the API response arrives.
 - `@media (prefers-reduced-motion)` block: shimmer animation replaced with a
   static muted fill; `skeleton-list` and `dashboard-content` transitions
   removed entirely.
+
+## [UX] Improved empty / error states — contextual actions instead of text-only
+
+Replaced every text-only status message with styled empty-state cards that
+offer a contextual next step, so users are never left staring at a dead end.
+
+### What changed
+
+**Frontend only** (`frontend/src/App.jsx`, `frontend/src/styles.css`).
+
+#### Two reusable components
+
+- `ErrorState({ heading, message, onRetry })` — a centred card with a ⚠ icon,
+  heading, optional detail line, and an optional "↺ Retry" button. Used
+  wherever an API call can fail so the user can recover without a page reload.
+- `EmptyFilterState({ hasQuery, hasFilters, onClearQuery, onReset })` — shown
+  when the search/filter combination produces no results; renders a "✕ Clear
+  search" button when a query is active and/or a "↺ Reset filters" button when
+  non-default filters are set, so the fix is one click away.
+
+#### Per-state improvements
+
+| Location | Before | After |
+|---|---|---|
+| Main dashboard — API error | `<p class="status error">` text | `ErrorState` with ↺ Retry |
+| Main dashboard — no filter results | plain text | `EmptyFilterState` with Clear / Reset actions |
+| Activity feed — API error | `<p class="status error">` text | `ErrorState` with ↺ Retry |
+| Activity feed — no events | plain text | empty state with icon + "↺ Refresh now" button |
+| Runs page — API error | `<p class="status error">` text | `ErrorState` with ↺ Retry |
+| Runs page — no runs found | plain text | empty state with icon + "← Back to Projects" |
+| Compare page — no selection | plain text | empty state with ⚖ icon + instructional copy |
+
+#### Retry plumbing
+
+Three new `useState` counters (`projectsRetryKey`, `runsRetryKey`,
+`activityRetryKey`) are added to `App`. Each is included in the dependency
+array of its corresponding fetch `useEffect`, so incrementing it re-triggers
+the fetch — giving the user a true one-click retry without a page reload.
+
+#### CSS (`frontend/src/styles.css`)
+
+New `.empty-state*` block (before the skeleton section):
+- `.empty-state` — flex column, centred, 2.5 rem vertical padding.
+- `.empty-state--error` — accent variant that tints the ⚠ icon `var(--danger)`.
+- `.empty-state-icon` — 2 rem, slightly dimmed (0.45 opacity) for decorative use.
+- `.empty-state-heading` — 1 rem semi-bold, full `var(--text)` colour.
+- `.empty-state-body` — 0.85 rem muted description, max-width 28 rem.
+- `.empty-state-actions` — wrapping flex row of action buttons.
+
+### Scope / notes
+
+- No backend changes, no new dependencies.
+- All action buttons reuse the existing `.action-btn` class so they match the
+  card action vocabulary exactly.
+- Could not run `npm run build` here (interactive approval required); changes
+  were reviewed by hand and are purely additive — no existing routes, fetches,
+  or components were modified (only the invocation call-sites for
+  `ActivityFeedPage` and `LastSecondRunsPage` gained an `onRetry` prop).

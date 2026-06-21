@@ -652,6 +652,47 @@ function loadStoredFilters() {
     }
 }
 
+function ErrorState({ heading = 'Something went wrong', message, onRetry }) {
+    return (
+        <div className="empty-state empty-state--error">
+            <span className="empty-state-icon" aria-hidden="true">⚠</span>
+            <h3 className="empty-state-heading">{heading}</h3>
+            {message && <p className="empty-state-body">{message}</p>}
+            {onRetry && (
+                <button className="action-btn action-btn--run" type="button" onClick={onRetry}>
+                    ↺ Retry
+                </button>
+            )}
+        </div>
+    );
+}
+
+function EmptyFilterState({ hasQuery, hasFilters, onClearQuery, onReset }) {
+    return (
+        <div className="empty-state">
+            <span className="empty-state-icon" aria-hidden="true">⊘</span>
+            <h3 className="empty-state-heading">No matching projects</h3>
+            <p className="empty-state-body">
+                {hasQuery
+                    ? 'Try a different search term or adjust your filters.'
+                    : 'Try changing the active filters.'}
+            </p>
+            <div className="empty-state-actions">
+                {hasQuery && (
+                    <button className="action-btn" type="button" onClick={onClearQuery}>
+                        ✕ Clear search
+                    </button>
+                )}
+                {hasFilters && (
+                    <button className="action-btn" type="button" onClick={onReset}>
+                        ↺ Reset filters
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function SkeletonCard({ index = 0 }) {
     return (
         <article
@@ -735,7 +776,7 @@ function ActivityRow({ event }) {
     );
 }
 
-function ActivityFeedPage({ events, loading, error, live, onToggleLive, lastUpdated, onBack }) {
+function ActivityFeedPage({ events, loading, error, live, onToggleLive, lastUpdated, onBack, onRetry }) {
     const projectCount = useMemo(
         () => new Set(events.map((e) => e.project)).size,
         [events],
@@ -778,11 +819,24 @@ function ActivityFeedPage({ events, loading, error, live, onToggleLive, lastUpda
             </header>
 
             {loading && events.length === 0 && <p className="status">Loading activity…</p>}
-            {error && <p className="status error">{error}</p>}
+            {error && <ErrorState heading="Could not load activity" message={error} onRetry={onRetry} />}
 
             {!error && (events.length > 0 || !loading) && (
                 <main className="activity-main">
-                    {events.length === 0 && <p className="status">No recent activity found.</p>}
+                    {events.length === 0 && (
+                        <div className="empty-state">
+                            <span className="empty-state-icon" aria-hidden="true">⚡</span>
+                            <h3 className="empty-state-heading">No recent file changes</h3>
+                            <p className="empty-state-body">
+                                Edit any file in a tracked project — it will appear here within 10 seconds.
+                            </p>
+                            {onRetry && (
+                                <button className="action-btn" type="button" onClick={onRetry}>
+                                    ↺ Refresh now
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <ul className="activity-list">
                         {events.map((event) => (
                             <ActivityRow key={event.rel_path} event={event} />
@@ -794,7 +848,7 @@ function ActivityFeedPage({ events, loading, error, live, onToggleLive, lastUpda
     );
 }
 
-function LastSecondRunsPage({ runs, loading, error, onBack }) {
+function LastSecondRunsPage({ runs, loading, error, onBack, onRetry }) {
     const limitCount = runs.filter((r) => r.session_limit_hit).length;
     return (
         <div className="runs-page">
@@ -812,11 +866,22 @@ function LastSecondRunsPage({ runs, loading, error, onBack }) {
             </header>
 
             {loading && <p className="status">Loading runs...</p>}
-            {error && <p className="status error">{error}</p>}
+            {error && <ErrorState heading="Could not load runs" message={error} onRetry={onRetry} />}
 
             {!loading && !error && (
                 <main className="grid runs-grid">
-                    {runs.length === 0 && <p className="status">No runs found.</p>}
+                    {runs.length === 0 && (
+                        <div className="empty-state">
+                            <span className="empty-state-icon" aria-hidden="true">📂</span>
+                            <h3 className="empty-state-heading">No runs found</h3>
+                            <p className="empty-state-body">
+                                Run directories from last_second_usage/runs will appear here.
+                            </p>
+                            <button className="action-btn" type="button" onClick={onBack}>
+                                ← Back to Projects
+                            </button>
+                        </div>
+                    )}
                     {runs.map((run) => (
                         <RunCard key={run.path} run={run} />
                     ))}
@@ -1907,7 +1972,13 @@ function ComparePage({ leaves, preselect, onBack }) {
             </div>
 
             {!ready && (
-                <p className="status">Select two projects to compare them side by side.</p>
+                <div className="empty-state">
+                    <span className="empty-state-icon" aria-hidden="true">⚖</span>
+                    <h3 className="empty-state-heading">Pick two projects above</h3>
+                    <p className="empty-state-body">
+                        Select Project A and B from the dropdowns to see them compared side by side.
+                    </p>
+                </div>
             )}
 
             {ready && (
@@ -2045,6 +2116,10 @@ function App() {
     // README content-search results, keyed by project path: { snippet, match_count }.
     const [readmeMatches, setReadmeMatches] = useState({});
     const searchRef = useRef(null);
+    // Retry keys: incrementing these re-triggers the corresponding fetch effects.
+    const [projectsRetryKey, setProjectsRetryKey] = useState(0);
+    const [runsRetryKey, setRunsRetryKey] = useState(0);
+    const [activityRetryKey, setActivityRetryKey] = useState(0);
 
     const filtersAtDefault =
         query === DEFAULT_FILTERS.query &&
@@ -2262,7 +2337,7 @@ function App() {
         loadHealth();
 
         return () => controller.abort();
-    }, []);
+    }, [projectsRetryKey]);
 
     useEffect(() => {
         if (route !== RUNS_HASH) return;
@@ -2291,7 +2366,7 @@ function App() {
 
         loadRuns();
         return () => controller.abort();
-    }, [route]);
+    }, [route, runsRetryKey]);
 
     useEffect(() => {
         if (route !== ACTIVITY_HASH) return;
@@ -2327,7 +2402,7 @@ function App() {
             cancelled = true;
             if (timer) clearInterval(timer);
         };
-    }, [route, activityLive]);
+    }, [route, activityLive, activityRetryKey]);
 
     // Flatten all leaf projects (children or top-level) for filter/search.
     const allLeaves = useMemo(() =>
@@ -2496,6 +2571,7 @@ function App() {
                         window.location.hash = '';
                         setRoute('');
                     }}
+                    onRetry={() => setActivityRetryKey((k) => k + 1)}
                 />
                 {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             </div>
@@ -2513,6 +2589,7 @@ function App() {
                         window.location.hash = '';
                         setRoute('');
                     }}
+                    onRetry={() => setRunsRetryKey((k) => k + 1)}
                 />
                 {paletteOpen && <ShortcutPalette onClose={() => setPaletteOpen(false)} />}
             </div>
@@ -2571,7 +2648,13 @@ function App() {
                 </div>
             </header>
 
-            {error && <p className="status error">{error}</p>}
+            {error && (
+                <ErrorState
+                    heading="Failed to load projects"
+                    message={error}
+                    onRetry={() => setProjectsRetryKey((k) => k + 1)}
+                />
+            )}
 
             {!error && loading && <SkeletonList />}
 
@@ -2610,7 +2693,12 @@ function App() {
                     )}
                     <main className="top-list">
                         {filteredProjects.length === 0 && (
-                            <p className="status">No projects match your search.</p>
+                            <EmptyFilterState
+                                hasQuery={!!query.trim()}
+                                hasFilters={repoFilter !== 'all' || techFilter !== 'all'}
+                                onClearQuery={() => setQuery('')}
+                                onReset={resetFilters}
+                            />
                         )}
                         {useCustomGrouping
                             ? customGroups.map((group, gi) => (

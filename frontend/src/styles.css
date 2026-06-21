@@ -1991,6 +1991,54 @@ h1 {
     }
 }
 
+/* ── Empty / error states ────────────────────────────────────────────────── */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    color: var(--muted);
+}
+
+.empty-state--error {
+    color: var(--fg);
+}
+
+.empty-state-icon {
+    font-size: 2rem;
+    line-height: 1;
+    opacity: 0.45;
+}
+
+.empty-state--error .empty-state-icon {
+    color: var(--danger);
+    opacity: 1;
+}
+
+.empty-state-heading {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.empty-state-body {
+    margin: 0;
+    font-size: 0.85rem;
+    max-width: 28rem;
+    line-height: 1.5;
+}
+
+.empty-state-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0.25rem;
+}
+
 /* ── Skeleton card placeholders ─────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
     0%   { background-position: -800px 0; }
