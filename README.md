@@ -100,3 +100,5 @@ defaults. `GET /api/scan-config` returns the active config (re-read on each call
 - `GET /api/health`: service health
 - `GET /api/scan-config`: active scan/ignore configuration
 - `GET /api/projects`: list of top-level folders with summary and git repo flag
+- `GET /api/readme/{project_path}`: raw README content for a project
+- `GET /api/search-readmes?q=…`: search README *content* across all projects (returns per-project match count + first-line snippet)

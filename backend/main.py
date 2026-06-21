@@ -48,6 +48,12 @@ MANIFEST_FILES = [
 README_MAX_TREE_ENTRIES = 300
 README_MAX_MANIFEST_CHARS = 4000
 
+# ── README content search config ─────────────────────────────────────────────
+# Ignore trivially short queries so a single character doesn't match everything.
+README_SEARCH_MIN_QUERY = 2
+# Cap the returned snippet so one long line can't bloat the response.
+README_SEARCH_MAX_SNIPPET = 200
+
 
 class ProjectSummary(BaseModel):
     name: str
@@ -126,6 +132,13 @@ class LastSecondRunSummary(BaseModel):
     related_project: str  # best-guess project name, 'multiple', or ''
     last_modified: str
     last_modified_epoch: float
+
+
+class ReadmeSearchMatch(BaseModel):
+    name: str
+    path: str               # project path relative to ROOT_DIR
+    match_count: int        # number of README lines containing the query
+    snippet: str            # first matching line, trimmed for display
 
 
 class GenerateReadmeRequest(BaseModel):
@@ -554,6 +567,57 @@ def read_readme_summary(project_dir: Path) -> str | None:
     return None
 
 
+def iter_leaf_project_dirs() -> Iterable[Path]:
+    """Yield every leaf project directory the dashboard actually lists.
+
+    Mirrors ``list_projects``: each non-expandable top-level dir, plus the
+    immediate child dirs of EXPANDABLE_DIRS (mockups/tutorials). Expandable
+    parents themselves are containers, not leaves, so they're skipped.
+    """
+    for project_dir in sorted(get_top_level_directories(), key=lambda p: p.name.lower()):
+        if project_dir.name in EXPANDABLE_DIRS:
+            for child in sorted(project_dir.iterdir(), key=lambda p: p.name.lower()):
+                if child.is_dir() and not child.name.startswith("."):
+                    yield child
+        else:
+            yield project_dir
+
+
+def search_readme_content(project_dir: Path, needle_lower: str) -> ReadmeSearchMatch | None:
+    """Return a match if the project's README contains ``needle_lower``.
+
+    Case-insensitive substring search over README lines; the first matching
+    line (trimmed and length-capped) becomes the snippet shown in the UI.
+    """
+    readme_path = find_readme(project_dir)
+    if readme_path is None:
+        return None
+    try:
+        text = readme_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+
+    match_count = 0
+    snippet = ""
+    for raw in text.splitlines():
+        if needle_lower in raw.lower():
+            match_count += 1
+            if not snippet:
+                trimmed = raw.strip()
+                snippet = trimmed[:README_SEARCH_MAX_SNIPPET]
+                if len(trimmed) > README_SEARCH_MAX_SNIPPET:
+                    snippet = snippet.rstrip() + "…"
+
+    if match_count == 0:
+        return None
+    return ReadmeSearchMatch(
+        name=project_dir.name,
+        path=str(project_dir.relative_to(ROOT_DIR)),
+        match_count=match_count,
+        snippet=snippet,
+    )
+
+
 def infer_summary(project_dir: Path) -> str:
     if project_dir.name in SPECIAL_SUMMARIES:
         return SPECIAL_SUMMARIES[project_dir.name]
@@ -975,6 +1039,31 @@ def get_project_readme(project_path: str) -> str:
         raise HTTPException(status_code=404, detail="README not found")
 
     return readme.read_text(encoding="utf-8", errors="ignore")
+
+
+@app.get("/api/search-readmes", response_model=list[ReadmeSearchMatch])
+def search_readmes(q: str = "", limit: int = 200) -> list[ReadmeSearchMatch]:
+    """Search README *content* across all listed projects.
+
+    Complements the dashboard's name/summary filter: a query can now surface a
+    project by what's written inside its README, not just its name. Returns one
+    match per project (with a hit count + first-line snippet), ordered by the
+    number of matching lines so the most relevant projects come first. Queries
+    shorter than ``README_SEARCH_MIN_QUERY`` return nothing.
+    """
+    needle = q.strip().lower()
+    if len(needle) < README_SEARCH_MIN_QUERY:
+        return []
+
+    limit = max(1, min(limit, 500))
+    matches: list[ReadmeSearchMatch] = []
+    for project_dir in iter_leaf_project_dirs():
+        match = search_readme_content(project_dir, needle)
+        if match is not None:
+            matches.append(match)
+
+    matches.sort(key=lambda m: (-m.match_count, m.name.lower()))
+    return matches[:limit]
 
 
 def build_file_tree(project_dir: Path, max_entries: int = README_MAX_TREE_ENTRIES) -> str:

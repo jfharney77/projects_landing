@@ -400,6 +400,49 @@ h1 {
     color: #dff4ff;
 }
 
+.readme-match {
+    margin-top: 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--muted);
+    border-left: 2px solid rgba(48, 209, 139, 0.5);
+    padding-left: 0.55rem;
+}
+
+.readme-match-label {
+    flex: none;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--accent-2);
+    text-transform: uppercase;
+}
+
+.readme-match-snippet {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-style: italic;
+    color: #c9d2f5;
+}
+
+.readme-match-hit {
+    background: rgba(48, 209, 139, 0.28);
+    color: #eafff4;
+    border-radius: 3px;
+    padding: 0 2px;
+}
+
+.readme-match-count {
+    flex: none;
+    font-size: 0.72rem;
+    color: var(--muted);
+    opacity: 0.8;
+}
+
 .updated-at {
     margin-top: 0.55rem;
     font-size: 0.76rem;

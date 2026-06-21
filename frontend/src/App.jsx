@@ -526,6 +526,8 @@ function writeProjectNote(path, text) {
 
 const FILTER_STORAGE_KEY = 'projects-landing:filters';
 const DEFAULT_FILTERS = { query: '', repoFilter: 'all', techFilter: 'all', sortBy: 'recent' };
+// Minimum query length before searching README content (matches the backend).
+const README_SEARCH_MIN_QUERY = 2;
 
 function loadStoredFilters() {
     try {
@@ -1066,7 +1068,30 @@ function ProjectMilestones({ project }) {
     );
 }
 
-function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
+// Render a README snippet with the matched query term highlighted. Splits on
+// the (case-insensitive) query and wraps each hit in a <mark>.
+function highlightSnippet(snippet, query) {
+    const q = (query || '').trim();
+    if (!q) return snippet;
+    const lower = snippet.toLowerCase();
+    const needle = q.toLowerCase();
+    const parts = [];
+    let i = 0;
+    let key = 0;
+    while (i < snippet.length) {
+        const hit = lower.indexOf(needle, i);
+        if (hit === -1) {
+            parts.push(snippet.slice(i));
+            break;
+        }
+        if (hit > i) parts.push(snippet.slice(i, hit));
+        parts.push(<mark key={key++} className="readme-match-hit">{snippet.slice(hit, hit + needle.length)}</mark>);
+        i = hit + needle.length;
+    }
+    return parts;
+}
+
+function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeMatch = null, query = '' }) {
     const readmeHref = project.readme_url || (project.has_readme
         ? `${API_BASE}/api/readme/${encodeProjectPath(project.path)}`
         : '');
@@ -1107,6 +1132,15 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
             {project.improvement_idea && (
                 <p className="improvement-note">
                     <strong>Improvement:</strong> {project.improvement_idea}
+                </p>
+            )}
+            {readmeMatch && readmeMatch.snippet && (
+                <p className="readme-match" title={`${readmeMatch.matchCount} matching line${readmeMatch.matchCount === 1 ? '' : 's'} in README`}>
+                    <span className="readme-match-label" aria-hidden="true">📄 README</span>
+                    <span className="readme-match-snippet">“{highlightSnippet(readmeMatch.snippet, query)}”</span>
+                    {readmeMatch.matchCount > 1 && (
+                        <span className="readme-match-count">+{readmeMatch.matchCount - 1} more</span>
+                    )}
                 </p>
             )}
             <p className="updated-at">{formatLastUpdated(project.last_modified)}</p>
@@ -1168,7 +1202,7 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0 }) {
     );
 }
 
-function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0 }) {
+function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0, readmeMatches = {}, query = '' }) {
     const [open, setOpen] = useState(true);
     return (
         <section className="project-group">
@@ -1180,7 +1214,7 @@ function ProjectGroup({ project, onOpenRuns, healthMap, baseIndex = 0 }) {
             {open && (
                 <div className="group-grid">
                     {project.children.map((child, j) => (
-                        <ProjectCard key={child.name} project={child} onOpenRuns={onOpenRuns} healthIssues={healthMap[child.path]} cardIndex={baseIndex + j} />
+                        <ProjectCard key={child.name} project={child} onOpenRuns={onOpenRuns} healthIssues={healthMap[child.path]} cardIndex={baseIndex + j} readmeMatch={readmeMatches[child.path]} query={query} />
                     ))}
                 </div>
             )}
@@ -1220,7 +1254,7 @@ function SearchBar({
                     ref={searchRef}
                     type="search"
                     className="search-input"
-                    placeholder="Search projects… (press / )"
+                    placeholder="Search names, summaries & README content… (press / )"
                     value={query}
                     onChange={(e) => onQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -1544,6 +1578,8 @@ function App() {
     const [sortBy, setSortBy] = useState(() => loadStoredFilters().sortBy);
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
+    // README content-search results, keyed by project path: { snippet, match_count }.
+    const [readmeMatches, setReadmeMatches] = useState({});
     const searchRef = useRef(null);
 
     const filtersAtDefault =
@@ -1570,6 +1606,40 @@ function App() {
             // Storage may be unavailable (private mode / quota) — ignore.
         }
     }, [query, repoFilter, techFilter, sortBy]);
+
+    // Search inside README content (backend) and merge the results into the
+    // client-side filter. Debounced so each keystroke doesn't hit the API; an
+    // AbortController cancels in-flight requests when the query changes again.
+    useEffect(() => {
+        const q = query.trim();
+        if (q.length < README_SEARCH_MIN_QUERY) {
+            setReadmeMatches({});
+            return undefined;
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/search-readmes?q=${encodeURIComponent(q)}`,
+                    { signal: controller.signal },
+                );
+                if (!res.ok) return;
+                const data = await res.json();
+                const next = {};
+                for (const m of data) {
+                    next[m.path] = { snippet: m.snippet, matchCount: m.match_count };
+                }
+                setReadmeMatches(next);
+            } catch {
+                // Aborted or network error — leave matches as-is; name/summary
+                // search still works, so README search degrades gracefully.
+            }
+        }, 250);
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [query]);
 
     useEffect(() => {
         const onHashChange = () => setRoute(currentHashRoute());
@@ -1716,7 +1786,9 @@ function App() {
             const passesQuery =
                 !q ||
                 p.name.toLowerCase().includes(q) ||
-                p.summary.toLowerCase().includes(q);
+                p.summary.toLowerCase().includes(q) ||
+                // README content match comes from the backend search endpoint.
+                Boolean(readmeMatches[p.path]);
             return passesRepo && passesTech && passesQuery;
         };
 
@@ -1735,7 +1807,7 @@ function App() {
         }, []);
 
         return matched.sort((a, b) => compareProjects(a, b, sortBy, true));
-    }, [projects, query, repoFilter, techFilter, sortBy]);
+    }, [projects, query, repoFilter, techFilter, sortBy, readmeMatches]);
 
     const filteredLeafCount = useMemo(() =>
         filteredProjects.flatMap((p) => p.children && p.children.length > 0 ? p.children : [p]).length,
@@ -1948,8 +2020,8 @@ function App() {
                         )}
                         {filteredProjects.map((project, i) =>
                             project.children && project.children.length > 0
-                                ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} baseIndex={i} />
-                                : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} />
+                                ? <ProjectGroup key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthMap={healthMap} baseIndex={i} readmeMatches={readmeMatches} query={query} />
+                                : <ProjectCard key={project.name} project={project} onOpenRuns={() => { window.location.hash = RUNS_HASH; }} healthIssues={healthMap[project.path]} cardIndex={i} readmeMatch={readmeMatches[project.path]} query={query} />
                         )}
                     </main>
                 </>

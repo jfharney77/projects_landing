@@ -498,3 +498,70 @@ glance without needing to expand the map.
 - No backend changes needed — reuses `last_modified_epoch` already returned by
   `GET /api/projects`.
 - Placed in `App` just above `<SearchBar>` so it renders on the main dashboard.
+
+## [Integration] Search inside README files
+
+The dashboard search box now matches **README content**, not just project names
+and summaries. Typing a term that appears anywhere inside a project's README —
+a library name, an endpoint, a feature — surfaces that project, with a snippet
+showing *where* it matched.
+
+### Backend (`backend/main.py`)
+- New `ReadmeSearchMatch` model: `name`, `path` (relative to `ROOT_DIR`),
+  `match_count` (README lines containing the query), and `snippet` (the first
+  matching line, trimmed to `README_SEARCH_MAX_SNIPPET` = 200 chars with an `…`).
+- New `iter_leaf_project_dirs()` helper yields exactly the project dirs the
+  dashboard lists — each non-expandable top-level dir plus the immediate children
+  of `EXPANDABLE_DIRS` (`mockups`/`tutorials`) — mirroring `list_projects` so the
+  search set matches the visible cards (including grouped children).
+- New `search_readme_content(project_dir, needle_lower)`: resolves the project's
+  README via the existing `find_readme()`, reads it with `errors="ignore"`, and
+  does a case-insensitive substring scan line-by-line. Returns `None` for projects
+  with no README (or unreadable files — guarded with `try/except OSError`).
+- New `GET /api/search-readmes?q=…&limit=…` endpoint: one match per project,
+  sorted by `match_count` desc then name. Queries shorter than
+  `README_SEARCH_MIN_QUERY` (= 2) return `[]` so a single character can't match
+  everything; `limit` is clamped to 1–500. Uses only existing helpers — no new deps.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- New `readmeMatches` state: a `{ [path]: { snippet, matchCount } }` map.
+- A **debounced** (`250 ms`) effect fires whenever `query` changes and is ≥ 2
+  chars, calling `/api/search-readmes`. An `AbortController` cancels the in-flight
+  request when the query changes again; short/empty queries clear the map. Any
+  fetch error is swallowed so README search **degrades gracefully** — name/summary
+  search still works.
+- `matchesLeaf` (in the `filteredProjects` memo) now also passes a project when
+  `readmeMatches[p.path]` exists, so README-only hits appear in the list.
+  `readmeMatches` was added to the memo's dependency array.
+- `ProjectCard` renders a `.readme-match` line (only when there's a match for the
+  active query): a `📄 README` label, the matched snippet in quotes with the query
+  term wrapped in `<mark>` via a new `highlightSnippet()` helper, and a
+  "`+N more`" badge when more than one line matched (`title` shows the full count).
+- `readmeMatches`/`query` are threaded through `ProjectGroup` to its child
+  `ProjectCard`s so grouped projects show snippets too.
+- The search input placeholder now reads "Search names, summaries & README
+  content…".
+- CSS: `.readme-match*` rules reuse existing tokens (`--accent-2`, `--muted`,
+  `--card-border`) with an accent left-border matching the `.improvement-note`
+  look; `.readme-match-hit` highlights matched terms with a green tint.
+
+### Test (`backend/test_readme_search.py`)
+- Dependency-free smoke test (same pattern as `test_milestones.py`): points
+  `main.ROOT_DIR` at a temp workspace of fake projects/READMEs and exercises the
+  min-query guard, content matching + ranking, case-insensitivity, snippet/count,
+  grouped-child (`mockups/*`) matching, and the missing-README case. Run with
+  `./.venv/bin/python test_readme_search.py`.
+
+### Scope / notes
+- Search is case-insensitive substring matching over raw README lines (fast and
+  predictable). It does not rank by term frequency beyond ordering projects by how
+  many lines matched, nor does it tokenize/stem — fuzzy or multi-term search would
+  be a natural follow-up.
+- READMEs are read fresh on each search request. For this local dashboard's size
+  that's instant; a cache keyed on README mtime would be the next step if the tree
+  ever grows large.
+- Could not run the backend test or `npm run build` here (command execution
+  requires interactive approval in this environment). Changes were reviewed by
+  hand; the backend additions are self-contained (new model + two helpers + one
+  endpoint) and the frontend changes are additive — they don't alter existing
+  routes, fetches, fields, or the name/summary search path.
