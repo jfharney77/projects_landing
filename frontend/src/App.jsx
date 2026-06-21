@@ -863,6 +863,83 @@ function HealthBadge({ issues }) {
     );
 }
 
+// Map a 0–100 health score to a colour band: green (healthy), amber (so-so), red (poor).
+function healthBand(score) {
+    if (score >= 75) return { className: 'good', color: '#3fb950' };
+    if (score >= 50) return { className: 'warn', color: '#d29922' };
+    return { className: 'poor', color: '#f85149' };
+}
+
+// Coloured ring badge summarising a project's weighted 0–100 health score.
+// Click to reveal the per-signal breakdown behind the number.
+function HealthRing({ score, signals }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        function handleClick(e) {
+            if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [open]);
+
+    if (score === null || score === undefined) return null;
+
+    const value = Math.max(0, Math.min(100, Math.round(score)));
+    const band = healthBand(value);
+    // SVG ring geometry — 36px box, stroke arc length driven by the score.
+    const radius = 15;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference * (1 - value / 100);
+
+    return (
+        <div className="health-ring-wrap" ref={ref}>
+            <button
+                className={`health-ring health-ring--${band.className}`}
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                title={`Health score: ${value}/100`}
+                aria-label={`Health score ${value} of 100. Click for breakdown.`}
+            >
+                <svg viewBox="0 0 36 36" width="36" height="36" aria-hidden="true">
+                    <circle className="health-ring-track" cx="18" cy="18" r={radius} />
+                    <circle
+                        className="health-ring-value"
+                        cx="18" cy="18" r={radius}
+                        stroke={band.color}
+                        strokeDasharray={circumference}
+                        strokeDashoffset={offset}
+                    />
+                </svg>
+                <span className="health-ring-score" style={{ color: band.color }}>{value}</span>
+            </button>
+            {open && (
+                <div className="health-popover health-ring-popover">
+                    <p className="health-popover-title">Health score: {value}/100</p>
+                    <ul className="health-signal-list">
+                        {(signals || []).map((s) => (
+                            <li
+                                key={s.key}
+                                className={`health-signal${s.applicable ? '' : ' health-signal--na'}`}
+                            >
+                                <span className="health-signal-dot" aria-hidden="true">
+                                    {!s.applicable ? '—' : s.score >= 0.75 ? '✓' : s.score >= 0.5 ? '~' : '✕'}
+                                </span>
+                                <span className="health-signal-label">{s.label}</span>
+                                <span className="health-signal-detail">
+                                    {s.applicable ? s.detail : `${s.detail} (n/a)`}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function RunServiceButton({ project, service, label }) {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -1251,6 +1328,7 @@ function ProjectCard({ project, onOpenRuns, healthIssues, cardIndex = 0, readmeM
                 <div className="tag-group">
                     <GitTags project={project} />
                     <HealthBadge issues={healthIssues} />
+                    <HealthRing score={project.health_score} signals={project.health_signals} />
                 </div>
             </div>
             <p>{project.summary}</p>

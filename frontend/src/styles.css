@@ -952,6 +952,97 @@ h1 {
     color: var(--danger);
 }
 
+/* ── Health score ring ───────────────────────────────────────────────────── */
+.health-ring-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.health-ring {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.health-ring svg {
+    transform: rotate(-90deg);  /* start the arc at 12 o'clock */
+}
+
+.health-ring-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.12);
+    stroke-width: 3.4;
+}
+
+.health-ring-value {
+    fill: none;
+    stroke-width: 3.4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.health-ring-score {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.health-ring:hover .health-ring-track {
+    stroke: rgba(255, 255, 255, 0.22);
+}
+
+/* Per-signal breakdown popover (reuses .health-popover positioning). */
+.health-signal-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.health-signal {
+    display: grid;
+    grid-template-columns: 1rem 1fr;
+    column-gap: 0.45rem;
+    align-items: baseline;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.health-signal-dot {
+    color: var(--muted);
+    font-weight: 700;
+    text-align: center;
+}
+
+.health-signal-label {
+    color: #e6edf3;
+    font-weight: 600;
+}
+
+.health-signal-detail {
+    grid-column: 2;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.health-signal--na {
+    opacity: 0.55;
+}
+
 /* ── Run service buttons ─────────────────────────────────────────────────── */
 .run-service-wrap {
     display: inline-flex;

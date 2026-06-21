@@ -761,3 +761,57 @@ opening a terminal to the project.
 - The `⎘` character renders without an emoji font, so it scales cleanly with the
   surrounding text rather than pulling in a color-emoji glyph.
 - Changes are purely additive/replacements in the frontend; no backend touches.
+
+## [New capability] Per-project health score
+
+Each project card now shows a coloured **ring badge** with a 0–100 health score,
+computed from a handful of weighted signals. Click the ring to see the per-signal
+breakdown behind the number.
+
+### Scoring model (`backend/main.py`)
+- New `compute_health_score(project_dir, *, has_readme, git_dirty, has_git)` blends
+  four signals, each producing a 0.0–1.0 sub-score:
+  - **Commit recency** (weight 35) — from `git log -1 --format=%ct`. Full marks for a
+    commit within `HEALTH_FRESH_DAYS` (7d), linearly decaying to 0 at
+    `HEALTH_STALE_DAYS` (180d).
+  - **Clean working tree** (weight 25) — reuses the existing `check_git_dirty`;
+    1.0 when clean, 0.0 when there are uncommitted changes.
+  - **README present** (weight 20) — reuses `find_readme`.
+  - **Service reachable** (weight 20) — checks the project's known `BACKEND_PORTS` /
+    `FRONTEND_PORTS` with the existing `_port_is_in_use` socket probe.
+- The final score is the **weighted average over only the *applicable* signals**,
+  scaled to 100. A project with no git repo or no known port is scored on what *can*
+  be observed rather than being unfairly docked for an unmeasurable signal (e.g. a
+  README-only static folder with a README scores 100, not 20).
+- New helpers `git_last_commit_epoch()` (timeout-guarded, returns `None` when there's
+  no repo/commits/git) and `project_known_ports()`.
+- `ProjectSummary` gains `health_score: int` and `health_signals: list[HealthSignal]`
+  (a new model: `key`, `label`, `detail`, `score`, `weight`, `applicable`), populated
+  in `build_project`. Tuning knobs (`HEALTH_FRESH_DAYS`, `HEALTH_STALE_DAYS`,
+  `HEALTH_WEIGHTS`) sit near the function.
+
+### Frontend (`frontend/src/App.jsx`, `frontend/src/styles.css`)
+- New `HealthRing` component renders an SVG progress ring whose arc length tracks the
+  score, with the number in the centre. Colour bands (`healthBand`): green ≥75,
+  amber ≥50, red below. Clicking toggles a popover (reusing `.health-popover`
+  positioning) that lists each signal with a ✓/~/✕/— marker, label, and detail;
+  inapplicable signals are dimmed and tagged "(n/a)".
+- Placed in the card's existing `tag-group`, alongside `GitTags` and the existing
+  warning-based `HealthBadge` (the two are complementary: the badge enumerates
+  concrete issues, the ring gives an at-a-glance rollup).
+
+### Test (`backend/test_health_score.py`)
+- Dependency-free smoke test (same style as `test_grouping_rules.py`), run with
+  `./.venv/bin/python test_health_score.py`. Stubs git timestamps and the port probe
+  so it's hermetic. Covers a perfect 100, a worst-case 0, the freshness decay
+  midpoint, and the "inapplicable signals aren't penalised" rule.
+
+### Scope / notes
+- Reuses existing primitives (`check_git_dirty`, `find_readme`, `_port_is_in_use`,
+  the port maps) rather than duplicating logic.
+- Port reachability is a point-in-time probe: a project whose service isn't running
+  scores 0 on that signal even if healthy. This is intentional (the dashboard is a
+  live operations view) but means scores fluctuate with what's running.
+- **Not verified at runtime in this session** — the sandbox blocked Python/`npm`
+  execution, so `test_health_score.py` and the Vite build were written/reviewed but
+  not run here. Both are expected to pass; run them before relying on the feature.

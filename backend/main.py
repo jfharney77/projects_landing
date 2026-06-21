@@ -72,7 +72,19 @@ class ProjectSummary(BaseModel):
     tech_tags: list[str] = []
     improvement_idea: str = ""
     git_dirty: bool = False  # True when the repo has uncommitted changes
+    health_score: int = 0           # 0–100 weighted health score (see compute_health_score)
+    health_signals: list["HealthSignal"] = []  # per-signal breakdown behind the score
     children: list["ProjectSummary"] = []
+
+
+class HealthSignal(BaseModel):
+    """One weighted contributor to a project's overall health score."""
+    key: str            # stable id: 'freshness' | 'readme' | 'clean_tree' | 'port'
+    label: str          # human-readable name for the tooltip
+    detail: str         # short explanation of the measured value
+    score: float        # 0.0–1.0 sub-score for this signal
+    weight: int         # relative weight (only counted when applicable)
+    applicable: bool    # False signals are skipped and don't affect the score
 
 
 class HealthIssue(BaseModel):
@@ -1629,6 +1641,134 @@ def check_git_dirty(project_dir: Path) -> bool:
         return False
 
 
+# ── Per-project health score ─────────────────────────────────────────────────
+# A 0–100 score blends a handful of weighted signals. Each signal yields a
+# 0.0–1.0 sub-score; the final score is the weighted average over only the
+# *applicable* signals (so a project with no git repo or no known port isn't
+# unfairly penalised for a signal that can't be measured). Tuning knobs:
+HEALTH_FRESH_DAYS = 7      # committed within this many days → full freshness
+HEALTH_STALE_DAYS = 180    # no commits in this long → zero freshness
+HEALTH_WEIGHTS = {
+    "freshness": 35,       # days since last commit (recency of work)
+    "clean_tree": 25,      # clean working tree (nothing uncommitted)
+    "readme": 20,          # presence of a README
+    "port": 20,            # known service port is reachable
+}
+
+
+def git_last_commit_epoch(project_dir: Path) -> float | None:
+    """Return the unix timestamp of the most recent commit, or None.
+
+    None means there's no git repo, no commits yet, or git is unavailable.
+    """
+    if not (project_dir / ".git").exists() or not shutil.which("git"):
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_dir), "log", "-1", "--format=%ct"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    out = result.stdout.strip()
+    if result.returncode != 0 or not out:
+        return None
+    try:
+        return float(out)
+    except ValueError:
+        return None
+
+
+def project_known_ports(project_dir: Path) -> list[int]:
+    """Return any configured service ports for a project (backend + frontend)."""
+    name = project_dir.name
+    ports: list[int] = []
+    for port_map in (BACKEND_PORTS, FRONTEND_PORTS):
+        port = port_map.get(name)
+        if port is not None and port not in ports:
+            ports.append(port)
+    return ports
+
+
+def compute_health_score(
+    project_dir: Path,
+    *,
+    has_readme: bool,
+    git_dirty: bool,
+    has_git: bool,
+) -> tuple[int, list[HealthSignal]]:
+    """Compute a 0–100 health score and the per-signal breakdown behind it.
+
+    The score is the weighted average of applicable signals scaled to 100, so a
+    project missing a measurable signal (no repo, no known port) is scored only
+    on what *can* be observed rather than being docked for it.
+    """
+    signals: list[HealthSignal] = []
+
+    # ── Freshness: how recently was the last commit? ──────────────────────────
+    last_commit = git_last_commit_epoch(project_dir)
+    if last_commit is None:
+        signals.append(HealthSignal(
+            key="freshness", label="Commit recency",
+            detail="No git history" if not has_git else "No commits yet",
+            score=0.0, weight=HEALTH_WEIGHTS["freshness"], applicable=False,
+        ))
+    else:
+        age_days = max(0.0, (datetime.now(tz=timezone.utc).timestamp() - last_commit) / 86400.0)
+        if age_days <= HEALTH_FRESH_DAYS:
+            fresh = 1.0
+        elif age_days >= HEALTH_STALE_DAYS:
+            fresh = 0.0
+        else:
+            span = HEALTH_STALE_DAYS - HEALTH_FRESH_DAYS
+            fresh = 1.0 - (age_days - HEALTH_FRESH_DAYS) / span
+        signals.append(HealthSignal(
+            key="freshness", label="Commit recency",
+            detail=f"Last commit {round(age_days)}d ago",
+            score=round(fresh, 3), weight=HEALTH_WEIGHTS["freshness"], applicable=True,
+        ))
+
+    # ── Clean working tree ────────────────────────────────────────────────────
+    signals.append(HealthSignal(
+        key="clean_tree", label="Clean working tree",
+        detail="Uncommitted changes" if git_dirty else "No uncommitted changes",
+        score=0.0 if git_dirty else 1.0,
+        weight=HEALTH_WEIGHTS["clean_tree"], applicable=has_git,
+    ))
+
+    # ── README present ────────────────────────────────────────────────────────
+    signals.append(HealthSignal(
+        key="readme", label="README present",
+        detail="README found" if has_readme else "No README",
+        score=1.0 if has_readme else 0.0,
+        weight=HEALTH_WEIGHTS["readme"], applicable=True,
+    ))
+
+    # ── Service port reachable ────────────────────────────────────────────────
+    ports = project_known_ports(project_dir)
+    if ports:
+        reachable = next((p for p in ports if _port_is_in_use(p)), None)
+        signals.append(HealthSignal(
+            key="port", label="Service reachable",
+            detail=(f"Port {reachable} responding" if reachable is not None
+                    else f"Port{'s' if len(ports) > 1 else ''} {', '.join(map(str, ports))} not responding"),
+            score=1.0 if reachable is not None else 0.0,
+            weight=HEALTH_WEIGHTS["port"], applicable=True,
+        ))
+    else:
+        signals.append(HealthSignal(
+            key="port", label="Service reachable",
+            detail="No known service port",
+            score=0.0, weight=HEALTH_WEIGHTS["port"], applicable=False,
+        ))
+
+    total_weight = sum(s.weight for s in signals if s.applicable)
+    if total_weight == 0:
+        return 0, signals
+    earned = sum(s.score * s.weight for s in signals if s.applicable)
+    return round(100 * earned / total_weight), signals
+
+
 def build_project(project_dir: Path) -> ProjectSummary:
     has_git = has_own_git_repo(project_dir)
     git_remote_url = detect_git_remote_url(project_dir) if has_git else ""
@@ -1637,6 +1777,10 @@ def build_project(project_dir: Path) -> ProjectSummary:
     disk_bytes, file_count = compute_disk_usage(project_dir)
     rel_path = str(project_dir.relative_to(ROOT_DIR))
     tech_tags = infer_tech_tags(project_dir)
+    git_dirty = check_git_dirty(project_dir)
+    health_score, health_signals = compute_health_score(
+        project_dir, has_readme=has_readme, git_dirty=git_dirty, has_git=has_git,
+    )
     return ProjectSummary(
         name=project_dir.name,
         path=rel_path,
@@ -1653,7 +1797,9 @@ def build_project(project_dir: Path) -> ProjectSummary:
         file_count=file_count,
         tech_tags=tech_tags,
         improvement_idea=infer_improvement_idea(project_dir, tech_tags),
-        git_dirty=check_git_dirty(project_dir),
+        git_dirty=git_dirty,
+        health_score=health_score,
+        health_signals=health_signals,
     )
 
 
