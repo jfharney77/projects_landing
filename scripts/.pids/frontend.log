@@ -1,0 +1,19 @@
+
+> projects-landing-frontend@0.1.0 dev
+> vite
+
+
+  VITE v5.4.21  ready in 128 ms
+
+  ➜  Local:   http://localhost:5177/
+  ➜  Network: use --host to expose
+1:18:32 PM [vite] hmr update /src/App.jsx
+1:18:50 PM [vite] hmr update /src/styles.css
+2:26:28 AM [vite] hmr update /src/App.jsx
+2:26:37 AM [vite] hmr update /src/App.jsx
+2:26:56 AM [vite] hmr update /src/App.jsx
+2:27:01 AM [vite] hmr update /src/App.jsx
+2:27:07 AM [vite] hmr update /src/App.jsx
+2:27:12 AM [vite] hmr update /src/App.jsx
+2:27:25 AM [vite] hmr update /src/App.jsx
+2:27:41 AM [vite] hmr update /src/styles.css

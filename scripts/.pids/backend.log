@@ -1,0 +1,151 @@
+INFO:     Will watch for changes in these directories: ['/home/john/fable5/projects_landing/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [363279] using WatchFiles
+INFO:     Started server process [363312]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:35838 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35836 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47256 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56674 - "GET /api/projects HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [363312]
+INFO:     Started server process [365223]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [365223]
+INFO:     Started server process [365294]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:57608 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57630 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57632 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57630 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52248 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52248 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52248 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52248 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52248 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45774 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45784 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45776 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57408 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57418 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57416 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40420 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40422 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40420 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52174 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52190 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52194 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34212 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34220 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [365294]
+INFO:     Started server process [624011]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:39870 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39874 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [624011]
+INFO:     Started server process [849502]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:38772 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38784 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38786 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56786 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56796 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56804 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40838 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40854 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40866 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47858 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47862 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47876 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57042 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59954 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59956 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47104 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47108 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47124 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47104 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47088 - "GET /api/last-second-runs HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [849502]
+INFO:     Started server process [988363]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [988363]
+INFO:     Started server process [988428]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:58290 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58304 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58306 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58306 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50836 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50836 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34302 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34318 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35170 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35176 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35176 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35170 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35184 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35184 - "GET /api/projects/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56794 - "GET /api/projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56808 - "GET /api/projects/health HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [988428]
+INFO:     Started server process [1002639]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1002639]
+INFO:     Started server process [1002659]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1002659]
+INFO:     Started server process [1002709]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'main.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [1002709]
+INFO:     Started server process [1003635]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
