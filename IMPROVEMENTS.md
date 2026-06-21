@@ -314,3 +314,55 @@ back out.
   this environment). The change is a single additive `onKeyDown` handler on the
   existing search input, following the same `e.key === 'Escape'` pattern used by
   the modals in this file; reviewed by hand.
+
+## Configurable scan/ignore list (keep junk folders out of the dashboard)
+
+Added a small JSON config file so you can control which top-level folders the
+dashboard indexes — without editing code — keeping dependency, build, and archive
+dirs out of the project list.
+
+### New config file (`backend/scan_config.json`)
+A self-documenting JSON file (each field has an adjacent `_*_help` comment key).
+Supported fields:
+- `include`: allowlist of folder names. If non-empty, **only** these are indexed
+  and everything else is skipped.
+- `ignore`: exact folder names to skip (ships with sensible defaults like
+  `node_modules`, `venv`, `.venv`, `__pycache__`, `dist`, `build`).
+- `ignore_globs`: fnmatch patterns to skip (e.g. `*-archive`, `*_archive`, `tmp`,
+  `temp`, `*.egg-info`).
+- `walk_skip_dirs`: extra folder names to prune during deep tree walks (activity
+  feed, file tree, README manifest collection), added on top of the built-in
+  `ACTIVITY_SKIP_DIRS` defaults.
+
+### Backend (`backend/main.py`)
+- New `load_scan_config()` that reads `backend/scan_config.json`, ignores `_`-prefixed
+  comment keys, coerces values to lists, and **falls back to safe defaults** if the
+  file is missing or malformed (indexing never breaks on a bad config).
+- New `is_indexable_top_level(name)` encapsulating the precedence rules: hidden dirs
+  and the `projects_landing` app folder are always excluded → then `include` acts as
+  an allowlist if set → otherwise `ignore` + `ignore_globs` exclude matches.
+- `get_top_level_directories()` now delegates its filtering to
+  `is_indexable_top_level()` (previously inline hidden/app-name checks), so every
+  endpoint built on it (`/api/projects`, `/api/projects/health`, `/api/activity`,
+  `/api/last-second-runs`) honors the config consistently.
+- `ACTIVITY_SKIP_DIRS` is extended with `walk_skip_dirs` from the config.
+- New `GET /api/scan-config` endpoint returns the active config (re-reading the file
+  on each call so edits take effect without a restart) plus the config file path and
+  whether it exists — handy for surfacing "excluded folders" in the UI later.
+
+### Docs
+- README gained a "Scan / ignore config" section and the new endpoint in the API list.
+
+### Scope / notes
+- No new dependencies — uses the stdlib `json` and `fnmatch` only.
+- Backwards compatible: with the shipped defaults, the previously-implicit skips
+  (hidden dirs, the app's own folder) still apply, and the common junk dirs are now
+  excluded by name/glob.
+- Could not execute Python here (interactive approval required in this environment),
+  so the loader/filter were verified by inspection. The defaults are conservative and
+  the loader is exception-guarded, so a malformed file degrades to "index everything
+  except hidden + app folder" rather than failing.
+- Possible follow-ups: surface the excluded list in the frontend via
+  `/api/scan-config`, and hot-reload `walk_skip_dirs` (currently the deep-walk set is
+  computed once at import; the top-level include/ignore rules already hot-reload).
+

@@ -1,0 +1,28 @@
+{
+  "_comment": "Controls which top-level folders the dashboard indexes. Edit this file (no code change needed) to keep junk folders out of the project list. See backend/main.py:load_scan_config for how it is applied.",
+
+  "include": [],
+  "_include_help": "Allowlist of top-level directory names. If non-empty, ONLY these are indexed and everything else is skipped. Leave empty to index everything except what 'ignore'/'ignore_globs' exclude.",
+
+  "ignore": [
+    "node_modules",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "dist",
+    "build"
+  ],
+  "_ignore_help": "Exact top-level directory names to skip. Hidden dirs (starting with '.') and this app's own folder are always skipped regardless.",
+
+  "ignore_globs": [
+    "*-archive",
+    "*_archive",
+    "tmp",
+    "temp",
+    "*.egg-info"
+  ],
+  "_ignore_globs_help": "fnmatch-style glob patterns; any top-level directory whose name matches is skipped.",
+
+  "walk_skip_dirs": [],
+  "_walk_skip_dirs_help": "Extra directory names to prune during deep tree walks (activity feed, file tree, manifest collection), added on top of the built-in defaults."
+}

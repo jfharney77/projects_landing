@@ -79,7 +79,24 @@ Windows (batch):
 - `scripts\\run_both.bat`: start backend and frontend in separate command windows
 - `scripts\\stop_both.bat`: stop processes listening on ports 8000 and 5177
 
+## Scan / ignore config
+
+Which top-level folders the dashboard indexes is controlled by
+`backend/scan_config.json` — edit that file (no code change needed) to keep junk
+folders out of the project list:
+
+- `include`: allowlist of folder names. If non-empty, **only** these are indexed.
+- `ignore`: exact folder names to skip (e.g. `node_modules`, `dist`).
+- `ignore_globs`: fnmatch patterns to skip (e.g. `*-archive`, `tmp`).
+- `walk_skip_dirs`: extra folder names pruned during deep tree walks
+  (activity feed, file tree, README manifest collection).
+
+Hidden dirs (starting with `.`) and the `projects_landing` app folder are always
+skipped regardless of config. A missing or malformed file falls back to safe
+defaults. `GET /api/scan-config` returns the active config (re-read on each call).
+
 ## API
 
 - `GET /api/health`: service health
+- `GET /api/scan-config`: active scan/ignore configuration
 - `GET /api/projects`: list of top-level folders with summary and git repo flag

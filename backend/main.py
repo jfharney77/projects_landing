@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+import fnmatch
 import subprocess
 import shutil
 from pathlib import Path
@@ -140,13 +142,73 @@ app.add_middleware(
 )
 
 
+# ── Scan / ignore configuration ──────────────────────────────────────────────
+# A small JSON file (backend/scan_config.json) lets you control which top-level
+# folders get indexed without touching code, so junk dirs (node_modules, build
+# output, archives, …) stay out of the dashboard. See that file for field docs.
+SCAN_CONFIG_FILE = Path(__file__).resolve().parent / "scan_config.json"
+
+DEFAULT_SCAN_CONFIG = {
+    "include": [],
+    "ignore": [],
+    "ignore_globs": [],
+    "walk_skip_dirs": [],
+}
+
+
+def load_scan_config() -> dict:
+    """Load backend/scan_config.json, falling back to safe defaults.
+
+    Keys prefixed with '_' (comments/help text) are ignored. A missing or
+    malformed file never breaks indexing — we just use the defaults.
+    """
+    config = {key: list(value) for key, value in DEFAULT_SCAN_CONFIG.items()}
+    if not SCAN_CONFIG_FILE.exists():
+        return config
+    try:
+        raw = json.loads(SCAN_CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return config
+    if not isinstance(raw, dict):
+        return config
+    for key in DEFAULT_SCAN_CONFIG:
+        value = raw.get(key)
+        if isinstance(value, list):
+            config[key] = [str(item) for item in value]
+    return config
+
+
+SCAN_CONFIG = load_scan_config()
+
+
+def is_indexable_top_level(name: str) -> bool:
+    """Decide whether a top-level directory name should be indexed.
+
+    Order of precedence:
+      1. Hidden dirs and this app's own folder are always excluded.
+      2. If 'include' is non-empty, it's an allowlist — only those are kept.
+      3. Otherwise, exclude names in 'ignore' or matching any 'ignore_globs'.
+    """
+    if name.startswith(".") or name == APP_DIR_NAME:
+        return False
+
+    include = SCAN_CONFIG.get("include") or []
+    if include:
+        return name in include
+
+    if name in (SCAN_CONFIG.get("ignore") or []):
+        return False
+    for pattern in SCAN_CONFIG.get("ignore_globs") or []:
+        if fnmatch.fnmatch(name, pattern):
+            return False
+    return True
+
+
 def get_top_level_directories() -> Iterable[Path]:
     for child in ROOT_DIR.iterdir():
         if not child.is_dir():
             continue
-        if child.name.startswith("."):
-            continue
-        if child.name == APP_DIR_NAME:
+        if not is_indexable_top_level(child.name):
             continue
         yield child
 
@@ -656,6 +718,8 @@ ACTIVITY_SKIP_DIRS = {
     ".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build",
     ".next", ".cache", ".pytest_cache", ".mypy_cache", "target", ".idea", ".vscode",
 }
+# Let scan_config.json extend the deep-walk prune list without code changes.
+ACTIVITY_SKIP_DIRS |= set(SCAN_CONFIG.get("walk_skip_dirs") or [])
 ACTIVITY_SKIP_SUFFIXES = (".pyc", ".pyo", ".log", ".lock", ".map")
 
 
@@ -722,6 +786,21 @@ def list_activity(limit: int = 40, per_project: int = 15) -> list[ActivityEvent]
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/scan-config")
+def get_scan_config() -> dict:
+    """Expose the active scan/ignore config so the UI can show what's excluded.
+
+    Re-reads the file on each call so edits take effect without a restart.
+    """
+    global SCAN_CONFIG
+    SCAN_CONFIG = load_scan_config()
+    return {
+        "config_file": str(SCAN_CONFIG_FILE),
+        "config_exists": SCAN_CONFIG_FILE.exists(),
+        **SCAN_CONFIG,
+    }
 
 
 @app.get("/api/projects/health", response_model=list[ProjectHealth])
